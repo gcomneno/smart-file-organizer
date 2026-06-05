@@ -6,7 +6,8 @@ The project organizes files by building a safe plan first. By default it only pr
 
 ## Current features
 
-- Classifies files by extension.
+- Classifies files by extension and semantic filename/path rules.
+- Can inspect supported document content with `--inspect-content`.
 - Builds an organization plan.
 - Reads explicit source files or direct files from a source directory.
 - Prints the plan by default, without moving files.
@@ -74,6 +75,21 @@ The command scans only direct files in the source directory. It does not scan ne
 
 This does not move files.
 
+### Dry run with content inspection
+
+~~~bash
+uv run smart-file-organizer --inspect-content --from /path/to/source --target /path/to/organized
+~~~
+
+This opt-in mode extracts text from supported documents and uses that text when building the plan.
+
+It is disabled by default. Start with a dry run before combining it with `--apply`.
+
+Currently supported document text sources:
+
+- `.txt` files;
+- `.pdf` files, using the first pages only.
+
 ### Apply the organization plan
 
 ~~~bash
@@ -98,6 +114,8 @@ Example target layout:
 
 The default mode is a dry run. Files are moved only with `--apply`.
 
+Content inspection is also opt-in. Document text is read only when `--inspect-content` is explicitly passed.
+
 Before applying a plan, the program checks that:
 
 - no two source files would be moved to the same destination;
@@ -108,7 +126,7 @@ If any of these checks fail, the command stops with an error.
 
 ## Current limitations
 
-- Classification is currently based only on file extension.
+- Content inspection is opt-in and currently limited to supported document types.
 - Directory scanning is not recursive.
 - Existing destination files are never overwritten.
 - There is no rename strategy for conflicts yet.
@@ -121,13 +139,21 @@ These limitations are intentional for now. The project is being built step by st
 ~~~text
 src/smart_file_organizer/
 ├── cli.py
-└── core.py
+├── content_planning.py
+├── core.py
+└── document_text.py
 
 tests/
 ├── test_cli.py
-└── test_core.py
+├── test_content_planning.py
+├── test_core.py
+└── test_document_text.py
 ~~~
 
 `core.py` contains the main domain logic.
+
+`content_planning.py` connects document text extraction to planning helpers.
+
+`document_text.py` contains supported document text extraction utilities.
 
 `cli.py` contains the command-line interface.
