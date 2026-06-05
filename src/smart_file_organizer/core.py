@@ -69,8 +69,21 @@ def classify_path(path: Path) -> FileCategory:
 
 def plan_file(source: Path, target_root: Path) -> PlannedMove:
     """Build a move plan for a single file without touching the filesystem."""
+    return plan_file_with_document_text(source, target_root, "")
+
+
+def plan_file_with_document_text(
+    source: Path,
+    target_root: Path,
+    document_text: str,
+) -> PlannedMove:
+    """Build a move plan using caller-provided document text."""
     category = classify_path(source)
-    destination = target_root / infer_destination_folder(source) / source.name
+    destination = (
+        target_root
+        / infer_destination_folder(source, document_text=document_text)
+        / source.name
+    )
 
     return PlannedMove(
         source=source,

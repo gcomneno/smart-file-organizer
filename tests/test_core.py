@@ -12,6 +12,7 @@ from smart_file_organizer.core import (
     infer_destination_folder,
     list_source_files,
     plan_file,
+    plan_file_with_document_text,
 )
 
 
@@ -338,6 +339,20 @@ def test_infer_destination_folder_from_realistic_backup_names(
     expected_folder: Path,
 ) -> None:
     assert infer_destination_folder(Path(filename)) == expected_folder
+
+
+def test_plan_file_with_document_text_uses_content_for_destination() -> None:
+    plan = plan_file_with_document_text(
+        Path("generic.pdf"),
+        Path("organized"),
+        "Demo Fiscal Agency\nCertificazione Unica\n",
+    )
+
+    assert plan == PlannedMove(
+        source=Path("generic.pdf"),
+        destination=Path("organized/documents/taxes/generic.pdf"),
+        category=FileCategory.DOCUMENTS,
+    )
 
 
 def test_plan_file_uses_semantic_destination_folder() -> None:
