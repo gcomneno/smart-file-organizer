@@ -264,19 +264,27 @@ _SEMANTIC_FOLDER_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 
-def _path_search_text(path: Path) -> str:
-    """Return normalized searchable text for a path."""
-    text = " ".join(path.parts).lower()
+def _normalize_search_text(text: str) -> str:
+    """Normalize text for semantic rule matching."""
+    normalized = text.lower()
 
     for separator in ("_", "-", ".", "/", "\\"):
-        text = text.replace(separator, " ")
+        normalized = normalized.replace(separator, " ")
 
-    return " ".join(text.split())
+    return " ".join(normalized.split())
 
 
-def infer_destination_folder(path: Path) -> Path:
+def _path_search_text(path: Path) -> str:
+    """Return normalized searchable text for a path."""
+    return _normalize_search_text(" ".join(path.parts))
+
+
+def infer_destination_folder(path: Path, *, document_text: str = "") -> Path:
     """Infer a semantic destination folder for a path."""
     search_text = _path_search_text(path)
+
+    if document_text:
+        search_text = _normalize_search_text(f"{search_text} {document_text}")
     suffixes = tuple(suffix.lower() for suffix in path.suffixes)
 
     if re.search(r"\b[a-z]{2}\d{3}[a-z]{2}\b", search_text):
