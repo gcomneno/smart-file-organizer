@@ -354,3 +354,17 @@ def test_plan_file_uses_semantic_destination_folder() -> None:
         ),
         category=FileCategory.DOCUMENTS,
     )
+
+
+def test_infer_destination_folder_uses_document_text_for_generic_filename() -> None:
+    assert infer_destination_folder(
+        Path("2612883212.pdf"),
+        document_text="Demo Fiscal Agency\nCertificazione Unica\n",
+    ) == Path("documents/taxes")
+
+
+def test_infer_destination_folder_uses_filename_when_text_is_empty() -> None:
+    assert infer_destination_folder(
+        Path("Conto-FASTWEB-M000000000-20260501.pdf"),
+        document_text="",
+    ) == Path("documents/utilities/fastweb")
