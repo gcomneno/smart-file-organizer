@@ -6,6 +6,7 @@ from smart_file_organizer.core import (
     FileCategory,
     PlannedMove,
     build_organization_plan,
+    build_organization_plan_with_document_texts,
     classify_path,
     execute_plan,
     find_destination_conflicts,
@@ -49,6 +50,32 @@ def test_plan_file_uses_other_category_for_unknown_extension() -> None:
 
     assert plan.destination == Path("organized/other/mystery.xyz")
     assert plan.category == FileCategory.OTHER
+
+
+def test_build_organization_plan_with_document_texts_uses_content() -> None:
+    plan = build_organization_plan_with_document_texts(
+        [
+            Path("generic.pdf"),
+            Path("photo.jpg"),
+        ],
+        Path("organized"),
+        {
+            Path("generic.pdf"): "Demo Fiscal Agency\nCertificazione Unica\n",
+        },
+    )
+
+    assert plan == [
+        PlannedMove(
+            source=Path("generic.pdf"),
+            destination=Path("organized/documents/taxes/generic.pdf"),
+            category=FileCategory.DOCUMENTS,
+        ),
+        PlannedMove(
+            source=Path("photo.jpg"),
+            destination=Path("organized/images/photo.jpg"),
+            category=FileCategory.IMAGES,
+        ),
+    ]
 
 
 def test_build_organization_plan_builds_multiple_moves() -> None:
