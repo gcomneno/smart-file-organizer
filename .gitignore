@@ -8,3 +8,10 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Local/private data used for manual experiments
+.local-data/
+.local-output/
+manual-runs/
+*.real.pdf
+*.private.pdf
