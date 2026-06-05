@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+import smart_file_organizer.cli as cli_module
 from smart_file_organizer.cli import (
     format_destination_conflicts,
     format_planned_move,
@@ -41,6 +42,52 @@ def test_format_destination_conflicts() -> None:
         "destination conflicts detected:\n"
         "- organized/images/photo.jpg: folder-a/photo.jpg, folder-b/photo.jpg"
     )
+
+
+def test_main_inspect_content_uses_content_aware_plan(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys,
+) -> None:
+    recorded_sources: list[Path] = []
+    recorded_target: Path | None = None
+
+    def fake_build_content_aware_plan(
+        sources,
+        target_root: Path,
+    ) -> list[PlannedMove]:
+        nonlocal recorded_target
+        recorded_sources.extend(sources)
+        recorded_target = target_root
+
+        return [
+            PlannedMove(
+                source=Path("generic.pdf"),
+                destination=Path("organized/documents/taxes/generic.pdf"),
+                category=FileCategory.DOCUMENTS,
+            )
+        ]
+
+    monkeypatch.setattr(
+        cli_module,
+        "build_organization_plan_inspecting_content",
+        fake_build_content_aware_plan,
+        raising=False,
+    )
+
+    main(
+        [
+            "--inspect-content",
+            "--target",
+            "organized",
+            "generic.pdf",
+        ]
+    )
+
+    captured = capsys.readouterr()
+
+    assert recorded_sources == [Path("generic.pdf")]
+    assert recorded_target == Path("organized")
+    assert captured.out == ("generic.pdf -> organized/documents/taxes/generic.pdf\n")
 
 
 def test_main_prints_organization_plan_from_explicit_sources(capsys) -> None:

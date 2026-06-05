@@ -4,6 +4,9 @@ import argparse
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+from smart_file_organizer.content_planning import (
+    build_organization_plan_inspecting_content,
+)
 from smart_file_organizer.core import (
     PlannedMove,
     build_organization_plan,
@@ -41,6 +44,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--apply",
         action="store_true",
         help="Execute the organization plan. Without this flag, only print the plan.",
+    )
+    parser.add_argument(
+        "--inspect-content",
+        action="store_true",
+        help=(
+            "Inspect supported document content when building the plan. "
+            "Disabled by default."
+        ),
     )
 
     return parser
@@ -97,7 +108,10 @@ def main(argv: Sequence[str] | None = None) -> None:
     except ValueError as error:
         parser.error(str(error))
 
-    plan = build_organization_plan(sources, args.target)
+    if args.inspect_content:
+        plan = build_organization_plan_inspecting_content(sources, args.target)
+    else:
+        plan = build_organization_plan(sources, args.target)
     conflicts = find_destination_conflicts(plan)
 
     if conflicts:
