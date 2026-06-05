@@ -3,6 +3,7 @@
 from collections.abc import Callable, Iterable
 from pathlib import Path
 
+from smart_file_organizer.document_text import extract_document_text
 from smart_file_organizer.core import (
     PlannedMove,
     build_organization_plan_with_document_texts,
@@ -25,4 +26,16 @@ def build_organization_plan_with_extracted_text(
         source_list,
         target_root,
         document_texts,
+    )
+
+
+def build_organization_plan_inspecting_content(
+    sources: Iterable[Path],
+    target_root: Path,
+) -> list[PlannedMove]:
+    """Build move plans using the default document text extractor."""
+    return build_organization_plan_with_extracted_text(
+        sources,
+        target_root,
+        extract_text=extract_document_text,
     )
