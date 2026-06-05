@@ -1,0 +1,1 @@
+"""Smart file organizer package."""
