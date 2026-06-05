@@ -368,6 +368,20 @@ def test_infer_destination_folder_from_realistic_backup_names(
     assert infer_destination_folder(Path(filename)) == expected_folder
 
 
+def test_infer_destination_folder_keeps_book_signal_over_text() -> None:
+    assert infer_destination_folder(
+        Path("Hacking Secret Ciphers with Python.pdf"),
+        document_text="INPS SFL ISEE DSU prestazioni a sostegno",
+    ) == Path("books/programming")
+
+
+def test_infer_destination_folder_keeps_learning_signal_over_document_text() -> None:
+    assert infer_destination_folder(
+        Path("Kleis Corso/c sharp - lezione 2/c sharp - lezione 2.pptx"),
+        document_text="INPS SFL ISEE DSU prestazioni a sostegno",
+    ) == Path("learning/kleis")
+
+
 def test_plan_file_with_document_text_uses_content_for_destination() -> None:
     plan = plan_file_with_document_text(
         Path("generic.pdf"),
