@@ -308,22 +308,35 @@ def _path_search_text(path: Path) -> str:
     return _normalize_search_text(" ".join(path.parts))
 
 
-def infer_destination_folder(path: Path, *, document_text: str = "") -> Path:
-    """Infer a semantic destination folder for a path."""
-    search_text = _path_search_text(path)
-
-    if document_text:
-        search_text = _normalize_search_text(f"{search_text} {document_text}")
-    suffixes = tuple(suffix.lower() for suffix in path.suffixes)
-
-    if re.search(r"\b[a-z]{2}\d{3}[a-z]{2}\b", search_text):
-        return Path("documents/vehicle")
-
+def _match_semantic_folder(search_text: str) -> Path | None:
+    """Return the first semantic folder matching searchable text."""
     for folder, keywords in _SEMANTIC_FOLDER_RULES:
         if any(keyword in search_text for keyword in keywords):
             return Path(folder)
 
+    return None
+
+
+def infer_destination_folder(path: Path, *, document_text: str = "") -> Path:
+    """Infer a semantic destination folder for a path."""
+    path_search_text = _path_search_text(path)
+    suffixes = tuple(suffix.lower() for suffix in path.suffixes)
+
+    if re.search(r"\b[a-z]{2}\d{3}[a-z]{2}\b", path_search_text):
+        return Path("documents/vehicle")
+
+    if path_semantic_folder := _match_semantic_folder(path_search_text):
+        return path_semantic_folder
+
     if any(suffix in {".epub", ".azw3"} for suffix in suffixes):
         return Path("books/fiction")
+
+    if document_text:
+        content_search_text = _normalize_search_text(
+            f"{path_search_text} {document_text}"
+        )
+
+        if content_semantic_folder := _match_semantic_folder(content_search_text):
+            return content_semantic_folder
 
     return Path(classify_path(path).value)
