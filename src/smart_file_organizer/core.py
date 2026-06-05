@@ -2,7 +2,7 @@
 
 import re
 import shutil
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -98,6 +98,22 @@ def build_organization_plan(
 ) -> list[PlannedMove]:
     """Build move plans for multiple files without touching the filesystem."""
     return [plan_file(source, target_root) for source in sources]
+
+
+def build_organization_plan_with_document_texts(
+    sources: Iterable[Path],
+    target_root: Path,
+    document_texts: Mapping[Path, str],
+) -> list[PlannedMove]:
+    """Build move plans using caller-provided document text."""
+    return [
+        plan_file_with_document_text(
+            source,
+            target_root,
+            document_texts.get(source, ""),
+        )
+        for source in sources
+    ]
 
 
 def list_source_files(source_root: Path) -> list[Path]:
