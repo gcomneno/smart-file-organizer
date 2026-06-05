@@ -7,7 +7,9 @@ authors = [
     { name = "Giancarlo Cicellyn Comneno", email = "giancarlo.cicellyn@gmail.com" }
 ]
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "pypdf>=6.12.2",
+]
 
 [project.scripts]
 smart-file-organizer = "smart_file_organizer.cli:main"

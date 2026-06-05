@@ -15,3 +15,6 @@ wheels/
 manual-runs/
 *.real.pdf
 *.private.pdf
+
+# Test/tool caches
+.pytest_cache/

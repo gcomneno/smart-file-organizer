@@ -185,8 +185,6 @@ _SEMANTIC_FOLDER_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "urologia",
             "urinocoltura",
             "ecoaddome",
-            "invalidita",
-            "l104",
             "deambulazione",
         ),
     ),
