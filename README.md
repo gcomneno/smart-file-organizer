@@ -1,5 +1,8 @@
 # smart-file-organizer
 
+[![CI](https://github.com/gcomneno/smart-file-organizer/actions/workflows/ci.yml/badge.svg)](https://github.com/gcomneno/smart-file-organizer/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 A small Python CLI project used as a clean-coding laboratory.
 
 The project organizes files by building a safe plan first. By default it only prints what it would do. Files are moved only when `--apply` is explicitly passed.
@@ -90,6 +93,8 @@ Currently supported document text sources:
 - `.txt` files;
 - `.pdf` files, using the first pages only.
 
+PDF content inspection works only for PDFs with extractable text. OCR for scanned documents is not implemented yet.
+
 ### Apply the organization plan
 
 ~~~bash
@@ -123,6 +128,20 @@ Before applying a plan, the program checks that:
 - no destination file already exists.
 
 If any of these checks fail, the command stops with an error.
+
+## Privacy and local data
+
+The repository must not contain private backup data, real document contents, or real manual-run outputs.
+
+Local experiments should stay in ignored paths such as:
+
+~~~text
+.local-data/
+.local-output/
+manual-runs/
+~~~
+
+Synthetic examples are preferred for tests and documentation.
 
 ## Current limitations
 
