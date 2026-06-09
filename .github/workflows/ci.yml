@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  quality:
+    name: Quality checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+          python-version: "3.12"
+
+      - name: Check formatting
+        run: uv run --frozen ruff format --check .
+
+      - name: Lint
+        run: uv run --frozen ruff check .
+
+      - name: Test
+        run: uv run --frozen python -m pytest
