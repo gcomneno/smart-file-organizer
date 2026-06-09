@@ -1,7 +1,7 @@
 [project]
 name = "smart-file-organizer"
 version = "0.1.0"
-description = "Add your description here"
+description = "A safe Python CLI for planning and applying file organization workflows."
 readme = "README.md"
 authors = [
     { name = "Giancarlo Cicellyn Comneno", email = "giancarlo.cicellyn@gmail.com" }
