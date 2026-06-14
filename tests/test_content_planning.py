@@ -91,3 +91,22 @@ def test_build_organization_plan_inspecting_content_uses_default_extractor(
             category=FileCategory.IMAGES,
         ),
     ]
+
+
+def test_build_organization_plan_with_extracted_text_uses_configured_rules() -> None:
+    source = Path("notes.txt")
+    rules = (
+        (
+            "learning/demo-course",
+            ("demo course",),
+        ),
+    )
+
+    plan = build_organization_plan_with_extracted_text(
+        [source],
+        Path("organized"),
+        extract_text=lambda _: "Notes from a demo course.",
+        semantic_rules=rules,
+    )
+
+    assert plan[0].destination == Path("organized/learning/demo-course/notes.txt")

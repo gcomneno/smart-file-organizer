@@ -1,0 +1,11 @@
+# Example configuration for smart-file-organizer.
+#
+# Keep real/private rules outside Git. Use this file only as a public template.
+
+[[semantic_rules]]
+folder = "documents/demo-utility"
+keywords = ["synthetic invoice", "demo utility"]
+
+[[semantic_rules]]
+folder = "learning/demo-course"
+keywords = ["demo course", "training notes"]
