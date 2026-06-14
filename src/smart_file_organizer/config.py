@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Any
 import tomllib
 
+from smart_file_organizer.errors import ConfigError
+
 
 @dataclass(frozen=True)
 class SemanticRule:
@@ -34,7 +36,7 @@ def parse_config(data: Mapping[str, Any]) -> OrganizerConfig:
     raw_rules = data.get("semantic_rules", [])
 
     if not isinstance(raw_rules, list):
-        raise ValueError("semantic_rules must be a list")
+        raise ConfigError("semantic_rules must be a list")
 
     return OrganizerConfig(
         semantic_rules=tuple(_parse_semantic_rule(rule) for rule in raw_rules),
@@ -44,19 +46,19 @@ def parse_config(data: Mapping[str, Any]) -> OrganizerConfig:
 def _parse_semantic_rule(data: object) -> SemanticRule:
     """Parse a semantic rule from raw TOML data."""
     if not isinstance(data, Mapping):
-        raise ValueError("semantic rule must be a table")
+        raise ConfigError("semantic rule must be a table")
 
     folder = data.get("folder")
     keywords = data.get("keywords")
 
     if not isinstance(folder, str) or not folder.strip():
-        raise ValueError("semantic rule folder must be a non-empty string")
+        raise ConfigError("semantic rule folder must be a non-empty string")
 
     if not isinstance(keywords, list) or not keywords:
-        raise ValueError("semantic rule keywords must be a non-empty list")
+        raise ConfigError("semantic rule keywords must be a non-empty list")
 
     if not all(isinstance(keyword, str) and keyword.strip() for keyword in keywords):
-        raise ValueError("semantic rule keywords must be non-empty strings")
+        raise ConfigError("semantic rule keywords must be non-empty strings")
 
     return SemanticRule(
         folder=folder,

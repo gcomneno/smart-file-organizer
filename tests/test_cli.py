@@ -4,11 +4,13 @@ import pytest
 
 import smart_file_organizer.cli as cli_module
 from smart_file_organizer.cli import (
+    collect_sources,
     format_destination_conflicts,
     format_planned_move,
     main,
 )
 from smart_file_organizer.core import FileCategory, PlannedMove
+from smart_file_organizer.errors import SourceSelectionError
 
 
 def test_format_planned_move() -> None:
@@ -342,3 +344,13 @@ semantic_rules = "wrong"
 
     assert error.value.code == 2
     assert "semantic_rules must be a list" in capsys.readouterr().err
+
+
+def test_collect_sources_raises_source_selection_error_for_conflicting_inputs(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(
+        SourceSelectionError,
+        match="pass either --from or source files, not both",
+    ):
+        collect_sources(tmp_path, [Path("notes.txt")])
