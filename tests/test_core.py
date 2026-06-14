@@ -15,6 +15,11 @@ from smart_file_organizer.core import (
     plan_file,
     plan_file_with_document_text,
 )
+from smart_file_organizer.errors import (
+    DestinationConflictError,
+    DestinationExistsError,
+    SourceMissingError,
+)
 
 
 @pytest.mark.parametrize(
@@ -476,3 +481,67 @@ def test_build_organization_plan_with_document_texts_uses_configured_rules() -> 
     )
 
     assert plan[0].destination == Path("organized/learning/demo-course/notes.txt")
+
+
+def test_execute_plan_raises_destination_conflict_error() -> None:
+    destination = Path("organized/images/photo.jpg")
+    plan = [
+        PlannedMove(
+            source=Path("folder-a/photo.jpg"),
+            destination=destination,
+            category=FileCategory.IMAGES,
+        ),
+        PlannedMove(
+            source=Path("folder-b/photo.jpg"),
+            destination=destination,
+            category=FileCategory.IMAGES,
+        ),
+    ]
+
+    with pytest.raises(
+        DestinationConflictError,
+        match="plan contains destination conflicts",
+    ):
+        execute_plan(plan)
+
+
+def test_execute_plan_raises_source_missing_error(tmp_path: Path) -> None:
+    missing_source = tmp_path / "missing.txt"
+    destination = tmp_path / "organized" / "documents" / "missing.txt"
+
+    plan = [
+        PlannedMove(
+            source=missing_source,
+            destination=destination,
+            category=FileCategory.DOCUMENTS,
+        )
+    ]
+
+    with pytest.raises(
+        SourceMissingError,
+        match=f"source file does not exist: {missing_source}",
+    ):
+        execute_plan(plan)
+
+
+def test_execute_plan_raises_destination_exists_error(tmp_path: Path) -> None:
+    source = tmp_path / "notes.txt"
+    destination = tmp_path / "organized" / "documents" / "notes.txt"
+    destination.parent.mkdir(parents=True)
+
+    source.write_text("new notes")
+    destination.write_text("existing notes")
+
+    plan = [
+        PlannedMove(
+            source=source,
+            destination=destination,
+            category=FileCategory.DOCUMENTS,
+        )
+    ]
+
+    with pytest.raises(
+        DestinationExistsError,
+        match=f"destination already exists: {destination}",
+    ):
+        execute_plan(plan)

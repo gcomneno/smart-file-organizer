@@ -6,6 +6,12 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
+from smart_file_organizer.errors import (
+    DestinationConflictError,
+    DestinationExistsError,
+    SourceMissingError,
+)
+
 
 class FileCategory(StrEnum):
     """Supported file categories."""
@@ -166,16 +172,16 @@ def execute_plan(plan: Iterable[PlannedMove]) -> None:
     moves = list(plan)
 
     if find_destination_conflicts(moves):
-        raise ValueError("plan contains destination conflicts")
+        raise DestinationConflictError("plan contains destination conflicts")
 
     for planned_move in moves:
         if not planned_move.source.exists():
-            raise FileNotFoundError(
+            raise SourceMissingError(
                 f"source file does not exist: {planned_move.source}"
             )
 
         if planned_move.destination.exists():
-            raise FileExistsError(
+            raise DestinationExistsError(
                 f"destination already exists: {planned_move.destination}"
             )
 

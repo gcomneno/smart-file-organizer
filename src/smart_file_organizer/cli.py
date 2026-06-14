@@ -16,6 +16,13 @@ from smart_file_organizer.core import (
     find_destination_conflicts,
     list_source_files,
 )
+from smart_file_organizer.errors import (
+    ConfigError,
+    DestinationConflictError,
+    DestinationExistsError,
+    SourceMissingError,
+    SourceSelectionError,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -70,17 +77,19 @@ def collect_sources(
 ) -> list[Path]:
     """Collect source files from explicit arguments or a source directory."""
     if source_root is not None and explicit_sources:
-        raise ValueError("pass either --from or source files, not both")
+        raise SourceSelectionError("pass either --from or source files, not both")
 
     if source_root is None and not explicit_sources:
-        raise ValueError("pass at least one source file or use --from")
+        raise SourceSelectionError("pass at least one source file or use --from")
 
     if source_root is not None:
         if not source_root.exists():
-            raise ValueError(f"source directory does not exist: {source_root}")
+            raise SourceSelectionError(
+                f"source directory does not exist: {source_root}"
+            )
 
         if not source_root.is_dir():
-            raise ValueError(f"source path is not a directory: {source_root}")
+            raise SourceSelectionError(f"source path is not a directory: {source_root}")
 
         return list_source_files(source_root)
 
@@ -123,7 +132,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     try:
         sources = collect_sources(args.source_root, args.sources)
         config = load_config(args.config) if args.config is not None else None
-    except (OSError, ValueError) as error:
+    except (OSError, ConfigError, SourceSelectionError) as error:
         parser.error(str(error))
 
     semantic_rules = semantic_rules_from_config(config)
@@ -148,7 +157,11 @@ def main(argv: Sequence[str] | None = None) -> None:
     if args.apply:
         try:
             execute_plan(plan)
-        except (FileExistsError, FileNotFoundError, ValueError) as error:
+        except (
+            DestinationExistsError,
+            SourceMissingError,
+            DestinationConflictError,
+        ) as error:
             parser.error(str(error))
         return
 

@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from smart_file_organizer.errors import ConfigError
 from smart_file_organizer.config import (
     OrganizerConfig,
     SemanticRule,
@@ -90,3 +91,8 @@ def test_parse_config_rejects_invalid_semantic_rules(
 ) -> None:
     with pytest.raises(ValueError, match=message):
         parse_config(raw_config)
+
+
+def test_parse_config_raises_config_error_for_invalid_data() -> None:
+    with pytest.raises(ConfigError, match="semantic_rules must be a list"):
+        parse_config({"semantic_rules": "wrong"})
