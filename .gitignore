@@ -21,3 +21,6 @@ manual-runs/
 
 # Tool caches
 .ruff_cache/
+
+# Local/private configuration
+smart-file-organizer.toml

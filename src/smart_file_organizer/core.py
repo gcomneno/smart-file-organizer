@@ -1,6 +1,5 @@
 """Core file organization logic."""
 
-import re
 import shutil
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
@@ -67,21 +66,37 @@ def classify_path(path: Path) -> FileCategory:
     return _EXTENSION_CATEGORIES.get(extension, FileCategory.OTHER)
 
 
-def plan_file(source: Path, target_root: Path) -> PlannedMove:
+def plan_file(
+    source: Path,
+    target_root: Path,
+    *,
+    semantic_rules: Iterable[tuple[str, tuple[str, ...]]] | None = None,
+) -> PlannedMove:
     """Build a move plan for a single file without touching the filesystem."""
-    return plan_file_with_document_text(source, target_root, "")
+    return plan_file_with_document_text(
+        source,
+        target_root,
+        "",
+        semantic_rules=semantic_rules,
+    )
 
 
 def plan_file_with_document_text(
     source: Path,
     target_root: Path,
     document_text: str,
+    *,
+    semantic_rules: Iterable[tuple[str, tuple[str, ...]]] | None = None,
 ) -> PlannedMove:
     """Build a move plan using caller-provided document text."""
     category = classify_path(source)
     destination = (
         target_root
-        / infer_destination_folder(source, document_text=document_text)
+        / infer_destination_folder(
+            source,
+            document_text=document_text,
+            semantic_rules=semantic_rules,
+        )
         / source.name
     )
 
@@ -95,22 +110,31 @@ def plan_file_with_document_text(
 def build_organization_plan(
     sources: Iterable[Path],
     target_root: Path,
+    *,
+    semantic_rules: Iterable[tuple[str, tuple[str, ...]]] | None = None,
 ) -> list[PlannedMove]:
     """Build move plans for multiple files without touching the filesystem."""
-    return [plan_file(source, target_root) for source in sources]
+    rules = _normalize_semantic_rules(semantic_rules)
+
+    return [plan_file(source, target_root, semantic_rules=rules) for source in sources]
 
 
 def build_organization_plan_with_document_texts(
     sources: Iterable[Path],
     target_root: Path,
     document_texts: Mapping[Path, str],
+    *,
+    semantic_rules: Iterable[tuple[str, tuple[str, ...]]] | None = None,
 ) -> list[PlannedMove]:
     """Build move plans using caller-provided document text."""
+    rules = _normalize_semantic_rules(semantic_rules)
+
     return [
         plan_file_with_document_text(
             source,
             target_root,
             document_texts.get(source, ""),
+            semantic_rules=rules,
         )
         for source in sources
     ]
@@ -160,7 +184,10 @@ def execute_plan(plan: Iterable[PlannedMove]) -> None:
         shutil.move(planned_move.source, planned_move.destination)
 
 
-_SEMANTIC_FOLDER_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
+SemanticFolderRule = tuple[str, tuple[str, ...]]
+
+
+_SEMANTIC_FOLDER_RULES: tuple[SemanticFolderRule, ...] = (
     (
         "documents/utilities/fastweb",
         (
@@ -241,6 +268,7 @@ _SEMANTIC_FOLDER_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "rinnovo parcheggio",
             "contrassegno",
             "bollo",
+            "ricevuta",
         ),
     ),
     (
@@ -308,35 +336,57 @@ def _path_search_text(path: Path) -> str:
     return _normalize_search_text(" ".join(path.parts))
 
 
-def _match_semantic_folder(search_text: str) -> Path | None:
+def _normalize_semantic_rules(
+    semantic_rules: Iterable[tuple[str, tuple[str, ...]]] | None,
+) -> tuple[SemanticFolderRule, ...]:
+    """Return caller-provided semantic rules or the built-in defaults."""
+    if semantic_rules is None:
+        return _SEMANTIC_FOLDER_RULES
+
+    return tuple(semantic_rules)
+
+
+def _match_semantic_folder(
+    search_text: str,
+    semantic_rules: Iterable[tuple[str, tuple[str, ...]]] | None = None,
+) -> Path | None:
     """Return the first semantic folder matching searchable text."""
-    for folder, keywords in _SEMANTIC_FOLDER_RULES:
+    rules = _normalize_semantic_rules(semantic_rules)
+
+    for folder, keywords in rules:
         if any(keyword in search_text for keyword in keywords):
             return Path(folder)
 
     return None
 
 
-def infer_destination_folder(path: Path, *, document_text: str = "") -> Path:
+def infer_destination_folder(
+    path: Path,
+    *,
+    document_text: str = "",
+    semantic_rules: Iterable[tuple[str, tuple[str, ...]]] | None = None,
+) -> Path:
     """Infer a semantic destination folder for a path."""
+    rules = _normalize_semantic_rules(semantic_rules)
     path_search_text = _path_search_text(path)
-    suffixes = tuple(suffix.lower() for suffix in path.suffixes)
 
-    if re.search(r"\b[a-z]{2}\d{3}[a-z]{2}\b", path_search_text):
-        return Path("documents/vehicle")
-
-    if path_semantic_folder := _match_semantic_folder(path_search_text):
+    if path_semantic_folder := _match_semantic_folder(path_search_text, rules):
         return path_semantic_folder
 
+    suffixes = tuple(suffix.lower() for suffix in path.suffixes)
     if any(suffix in {".epub", ".azw3"} for suffix in suffixes):
         return Path("books/fiction")
 
-    if document_text:
-        content_search_text = _normalize_search_text(
-            f"{path_search_text} {document_text}"
-        )
+    category = classify_path(path)
+    if category != FileCategory.DOCUMENTS:
+        return Path(category.value)
 
-        if content_semantic_folder := _match_semantic_folder(content_search_text):
+    if document_text:
+        content_search_text = _normalize_search_text(document_text)
+        if content_semantic_folder := _match_semantic_folder(
+            content_search_text,
+            rules,
+        ):
             return content_semantic_folder
 
-    return Path(classify_path(path).value)
+    return Path(category.value)

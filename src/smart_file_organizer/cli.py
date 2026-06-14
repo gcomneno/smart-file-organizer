@@ -4,11 +4,13 @@ import argparse
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+from smart_file_organizer.config import OrganizerConfig, load_config
 from smart_file_organizer.content_planning import (
     build_organization_plan_inspecting_content,
 )
 from smart_file_organizer.core import (
     PlannedMove,
+    SemanticFolderRule,
     build_organization_plan,
     execute_plan,
     find_destination_conflicts,
@@ -39,6 +41,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path("organized"),
         help="Target root directory for organized files. Defaults to 'organized'.",
+    )
+    parser.add_argument(
+        "--config",
+        type=Path,
+        help="Optional TOML configuration file with semantic rules.",
     )
     parser.add_argument(
         "--apply",
@@ -80,6 +87,16 @@ def collect_sources(
     return list(explicit_sources)
 
 
+def semantic_rules_from_config(
+    config: OrganizerConfig | None,
+) -> tuple[SemanticFolderRule, ...] | None:
+    """Return semantic rules from loaded configuration."""
+    if config is None:
+        return None
+
+    return tuple((rule.folder, rule.keywords) for rule in config.semantic_rules)
+
+
 def format_planned_move(move: PlannedMove) -> str:
     """Format a planned move for terminal output."""
     return f"{move.source} -> {move.destination}"
@@ -105,13 +122,24 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     try:
         sources = collect_sources(args.source_root, args.sources)
-    except ValueError as error:
+        config = load_config(args.config) if args.config is not None else None
+    except (OSError, ValueError) as error:
         parser.error(str(error))
 
+    semantic_rules = semantic_rules_from_config(config)
+
     if args.inspect_content:
-        plan = build_organization_plan_inspecting_content(sources, args.target)
+        plan = build_organization_plan_inspecting_content(
+            sources,
+            args.target,
+            semantic_rules=semantic_rules,
+        )
     else:
-        plan = build_organization_plan(sources, args.target)
+        plan = build_organization_plan(
+            sources,
+            args.target,
+            semantic_rules=semantic_rules,
+        )
     conflicts = find_destination_conflicts(plan)
 
     if conflicts:
