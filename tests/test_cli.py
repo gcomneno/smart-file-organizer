@@ -54,6 +54,8 @@ def test_main_inspect_content_uses_content_aware_plan(
     def fake_build_content_aware_plan(
         sources,
         target_root: Path,
+        *,
+        semantic_rules=None,
     ) -> list[PlannedMove]:
         nonlocal recorded_target
         recorded_sources.extend(sources)
@@ -291,3 +293,52 @@ def test_main_apply_reports_execution_errors(
     assert f"destination already exists: {destination}" in captured.err
     assert source.read_text() == "new image"
     assert destination.read_text() == "existing image"
+
+
+def test_main_uses_configured_semantic_rules(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config_file = tmp_path / "smart-file-organizer.toml"
+    config_file.write_text(
+        """
+[[semantic_rules]]
+folder = "documents/demo-utility"
+keywords = ["synthetic invoice"]
+""",
+        encoding="utf-8",
+    )
+
+    main(
+        [
+            "--config",
+            str(config_file),
+            "--target",
+            "organized",
+            "synthetic-invoice.pdf",
+        ]
+    )
+
+    assert capsys.readouterr().out == (
+        "synthetic-invoice.pdf -> "
+        "organized/documents/demo-utility/synthetic-invoice.pdf\n"
+    )
+
+
+def test_main_reports_invalid_config(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config_file = tmp_path / "smart-file-organizer.toml"
+    config_file.write_text(
+        """
+semantic_rules = "wrong"
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SystemExit) as error:
+        main(["--config", str(config_file), "notes.txt"])
+
+    assert error.value.code == 2
+    assert "semantic_rules must be a list" in capsys.readouterr().err

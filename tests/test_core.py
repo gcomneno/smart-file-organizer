@@ -424,3 +424,55 @@ def test_infer_destination_folder_uses_filename_when_text_is_empty() -> None:
         Path("Conto-FASTWEB-M000000000-20260501.pdf"),
         document_text="",
     ) == Path("documents/utilities/fastweb")
+
+
+def test_infer_destination_folder_uses_configured_semantic_rules() -> None:
+    rules = (
+        (
+            "documents/demo-utility",
+            ("demo utility", "synthetic invoice"),
+        ),
+    )
+
+    assert infer_destination_folder(
+        Path("synthetic-invoice.pdf"),
+        semantic_rules=rules,
+    ) == Path("documents/demo-utility")
+
+
+def test_plan_file_uses_configured_semantic_rules() -> None:
+    rules = (
+        (
+            "documents/demo-utility",
+            ("synthetic invoice",),
+        ),
+    )
+
+    move = plan_file(
+        Path("synthetic-invoice.pdf"),
+        Path("organized"),
+        semantic_rules=rules,
+    )
+
+    assert move.destination == Path(
+        "organized/documents/demo-utility/synthetic-invoice.pdf"
+    )
+
+
+def test_build_organization_plan_with_document_texts_uses_configured_rules() -> None:
+    source = Path("notes.txt")
+    rules = (
+        (
+            "learning/demo-course",
+            ("demo course",),
+        ),
+    )
+
+    plan = build_organization_plan_with_document_texts(
+        [source],
+        Path("organized"),
+        {source: "Notes from a demo course about safe file organization."},
+        semantic_rules=rules,
+    )
+
+    assert plan[0].destination == Path("organized/learning/demo-course/notes.txt")

@@ -129,6 +129,29 @@ Before applying a plan, the program checks that:
 
 If any of these checks fail, the command stops with an error.
 
+## Configuration
+
+You can pass an optional TOML configuration file with semantic destination rules:
+
+~~~bash
+uv run smart-file-organizer \
+  --config smart-file-organizer.example.toml \
+  --target organized \
+  synthetic-invoice.pdf
+~~~
+
+Example configuration:
+
+~~~toml
+[[semantic_rules]]
+folder = "documents/demo-utility"
+keywords = ["synthetic invoice", "demo utility"]
+~~~
+
+When a configured keyword matches the file path or inspected document text, the configured folder is used as the destination subfolder.
+
+Private configuration files should not be committed. Use `smart-file-organizer.example.toml` as a public template and keep local/private rules in `smart-file-organizer.toml` or under ignored paths such as `.local-data/`.
+
 ## Privacy and local data
 
 The repository must not contain private backup data, real document contents, or real manual-run outputs.
