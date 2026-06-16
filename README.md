@@ -117,6 +117,28 @@ Example target layout:
     └── photo.jpg
 ~~~
 
+## Command layout
+
+The CLI supports command groups. The primary command is currently `plan`:
+
+~~~bash
+uv run smart-file-organizer plan --target organized photo.jpg
+~~~
+
+Planning remains safe by default: it prints the move plan without moving files.
+
+Use `--apply` explicitly to execute the plan:
+
+~~~bash
+uv run smart-file-organizer plan --from Downloads --target organized --apply
+~~~
+
+The original direct planning style is still supported as a compatibility path:
+
+~~~bash
+uv run smart-file-organizer --target organized photo.jpg
+~~~
+
 ## Safety behavior
 
 The default mode is a dry run. Files are moved only with `--apply`.

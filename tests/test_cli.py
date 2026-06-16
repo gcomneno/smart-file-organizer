@@ -4,6 +4,7 @@ import pytest
 
 import smart_file_organizer.cli as cli_module
 from smart_file_organizer.cli import (
+    build_parser,
     collect_sources,
     format_destination_conflicts,
     format_planned_move,
@@ -112,6 +113,33 @@ def test_main_prints_organization_plan_from_explicit_sources(capsys) -> None:
         "notes.txt -> organized/documents/notes.txt\n"
         "script.py -> organized/code/script.py\n"
     )
+
+
+def test_main_plan_command_prints_organization_plan(capsys) -> None:
+    main(
+        [
+            "plan",
+            "--target",
+            "organized",
+            "photo.jpg",
+        ]
+    )
+
+    captured = capsys.readouterr()
+
+    assert captured.out == "photo.jpg -> organized/images/photo.jpg\n"
+
+
+def test_build_parser_lists_plan_command(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        build_parser().parse_args(["--help"])
+
+    captured = capsys.readouterr()
+
+    assert exc_info.value.code == 0
+    assert "plan" in captured.out
 
 
 def test_main_prints_organization_plan_from_directory(
