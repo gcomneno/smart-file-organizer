@@ -2,6 +2,7 @@
 
 import argparse
 import logging
+import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
@@ -34,8 +35,22 @@ def build_parser() -> argparse.ArgumentParser:
     """Build the command line argument parser."""
     parser = argparse.ArgumentParser(
         prog="smart-file-organizer",
-        description="Build a file organization plan without moving files.",
+        description="Organize files through safe command groups.",
     )
+    subparsers = parser.add_subparsers(dest="command", metavar="command")
+
+    plan_parser = subparsers.add_parser(
+        "plan",
+        help="Build or apply a file organization plan.",
+        description="Build a file organization plan without moving files by default.",
+    )
+    _add_plan_arguments(plan_parser)
+
+    return parser
+
+
+def _add_plan_arguments(parser: argparse.ArgumentParser) -> None:
+    """Add file planning arguments to a parser."""
     parser.add_argument(
         "sources",
         nargs="*",
@@ -78,7 +93,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Enable high-level application logging.",
     )
 
-    return parser
+
+def _normalize_argv(argv: Sequence[str] | None) -> list[str]:
+    """Return argv with the default command inserted for legacy invocations."""
+    args = list(sys.argv[1:] if argv is None else argv)
+
+    if args and args[0] in {"-h", "--help"}:
+        return args
+
+    if args and args[0] == "plan":
+        return args
+
+    return ["plan", *args]
 
 
 def collect_sources(
@@ -137,7 +163,7 @@ def format_destination_conflicts(
 def main(argv: Sequence[str] | None = None) -> None:
     """Run the smart-file-organizer command."""
     parser = build_parser()
-    args = parser.parse_args(argv)
+    args = parser.parse_args(_normalize_argv(argv))
     configure_logging(verbose=args.verbose)
 
     logger.info(
