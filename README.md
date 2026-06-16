@@ -152,6 +152,19 @@ When a configured keyword matches the file path or inspected document text, the 
 
 Private configuration files should not be committed. Use `smart-file-organizer.example.toml` as a public template and keep local/private rules in `smart-file-organizer.toml` or under ignored paths such as `.local-data/`.
 
+## Logging
+
+The command is quiet by default.
+
+Use `--verbose` to enable high-level application logs:
+
+~~~bash
+uv run smart-file-organizer --verbose --target organized photo.jpg
+~~~
+
+Verbose logs use simple key-value events such as `event=sources_collected count=1`.
+Logs should describe application events only. They must not include extracted document text, private document contents, or full inspected content.
+
 ## Privacy and local data
 
 The repository must not contain private backup data, real document contents, or real manual-run outputs.

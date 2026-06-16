@@ -1,9 +1,11 @@
 """Command line interface for smart-file-organizer."""
 
 import argparse
+import logging
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+from smart_file_organizer.app_logging import configure_logging
 from smart_file_organizer.config import OrganizerConfig, load_config
 from smart_file_organizer.content_planning import (
     build_organization_plan_inspecting_content,
@@ -23,6 +25,9 @@ from smart_file_organizer.errors import (
     SourceMissingError,
     SourceSelectionError,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -66,6 +71,11 @@ def build_parser() -> argparse.ArgumentParser:
             "Inspect supported document content when building the plan. "
             "Disabled by default."
         ),
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable high-level application logging.",
     )
 
     return parser
@@ -128,10 +138,23 @@ def main(argv: Sequence[str] | None = None) -> None:
     """Run the smart-file-organizer command."""
     parser = build_parser()
     args = parser.parse_args(argv)
+    configure_logging(verbose=args.verbose)
+
+    logger.info(
+        "event=cli_started inspect_content=%s apply=%s",
+        args.inspect_content,
+        args.apply,
+    )
 
     try:
         sources = collect_sources(args.source_root, args.sources)
+        logger.info("event=sources_collected count=%s", len(sources))
+
         config = load_config(args.config) if args.config is not None else None
+        if config is not None:
+            logger.info(
+                "event=config_loaded semantic_rules=%s", len(config.semantic_rules)
+            )
     except (OSError, ConfigError, SourceSelectionError) as error:
         parser.error(str(error))
 
@@ -149,9 +172,15 @@ def main(argv: Sequence[str] | None = None) -> None:
             args.target,
             semantic_rules=semantic_rules,
         )
+
+    logger.info(
+        "event=plan_built count=%s inspect_content=%s", len(plan), args.inspect_content
+    )
+
     conflicts = find_destination_conflicts(plan)
 
     if conflicts:
+        logger.warning("event=destination_conflicts count=%s", len(conflicts))
         parser.error(format_destination_conflicts(conflicts))
 
     if args.apply:
@@ -162,7 +191,10 @@ def main(argv: Sequence[str] | None = None) -> None:
             SourceMissingError,
             DestinationConflictError,
         ) as error:
+            logger.error("event=plan_apply_failed error_type=%s", type(error).__name__)
             parser.error(str(error))
+
+        logger.info("event=plan_applied count=%s", len(plan))
         return
 
     for move in plan:
