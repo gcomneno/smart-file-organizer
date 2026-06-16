@@ -354,3 +354,24 @@ def test_collect_sources_raises_source_selection_error_for_conflicting_inputs(
         match="pass either --from or source files, not both",
     ):
         collect_sources(tmp_path, [Path("notes.txt")])
+
+
+def test_main_is_quiet_by_default(capsys: pytest.CaptureFixture[str]) -> None:
+    main(["photo.jpg"])
+
+    captured = capsys.readouterr()
+
+    assert captured.err == ""
+
+
+def test_main_verbose_logs_high_level_events(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    main(["--verbose", "photo.jpg"])
+
+    captured = capsys.readouterr()
+
+    assert "event=cli_started inspect_content=False apply=False" in captured.err
+    assert "event=sources_collected count=1" in captured.err
+    assert "event=plan_built count=1 inspect_content=False" in captured.err
+    assert "photo.jpg" not in captured.err
