@@ -21,6 +21,7 @@ The project organizes files by building a safe plan first. By default it only pr
 - Reports CLI errors in a readable way.
 - Uses project-local tooling with `uv`.
 - Uses `ruff` for formatting and linting.
+- Uses `ty` for static type checks.
 - Uses `pytest` for tests.
 
 ## Development setup
@@ -34,7 +35,7 @@ uv sync
 Run the test suite:
 
 ~~~bash
-uv run pytest
+uv run python -m pytest
 ~~~
 
 Run formatting and linting checks:
@@ -42,6 +43,7 @@ Run formatting and linting checks:
 ~~~bash
 uv run ruff format --check .
 uv run ruff check .
+uv run ty check
 ~~~
 
 Format the project:
@@ -185,7 +187,7 @@ Synthetic examples are preferred for tests and documentation.
 - Directory scanning is not recursive.
 - Existing destination files are never overwritten.
 - There is no rename strategy for conflicts yet.
-- There is no configuration file yet.
+- Configuration currently supports semantic TOML rules only.
 
 These limitations are intentional for now. The project is being built step by step with small, tested changes.
 
