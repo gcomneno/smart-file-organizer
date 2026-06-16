@@ -195,19 +195,35 @@ These limitations are intentional for now. The project is being built step by st
 
 ~~~text
 src/smart_file_organizer/
+├── app_logging.py
+├── classification.py
 ├── cli.py
+├── config.py
 ├── content_planning.py
 ├── core.py
-└── document_text.py
+├── document_text.py
+├── errors.py
+├── models.py
+├── planning.py
+└── semantic_rules.py
 
 tests/
 ├── test_cli.py
+├── test_config.py
 ├── test_content_planning.py
 ├── test_core.py
 └── test_document_text.py
 ~~~
 
-`core.py` contains the main domain logic.
+`core.py` keeps compatibility exports for the original public core imports.
+
+`models.py` contains shared domain models and type aliases.
+
+`classification.py` contains extension-based file classification.
+
+`semantic_rules.py` contains semantic destination rule matching.
+
+`planning.py` contains move planning, conflict detection, and safe execution helpers.
 
 `content_planning.py` connects document text extraction to planning helpers.
 
