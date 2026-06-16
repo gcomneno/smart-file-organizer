@@ -57,10 +57,14 @@ def _parse_semantic_rule(data: object) -> SemanticRule:
     if not isinstance(keywords, list) or not keywords:
         raise ConfigError("semantic rule keywords must be a non-empty list")
 
-    if not all(isinstance(keyword, str) and keyword.strip() for keyword in keywords):
-        raise ConfigError("semantic rule keywords must be non-empty strings")
+    parsed_keywords: list[str] = []
+    for keyword in keywords:
+        if not isinstance(keyword, str) or not keyword.strip():
+            raise ConfigError("semantic rule keywords must be non-empty strings")
+
+        parsed_keywords.append(keyword)
 
     return SemanticRule(
         folder=folder,
-        keywords=tuple(keywords),
+        keywords=tuple(parsed_keywords),
     )
