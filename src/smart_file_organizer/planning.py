@@ -10,6 +10,7 @@ from smart_file_organizer.errors import (
     DestinationExistsError,
     SourceMissingError,
 )
+from smart_file_organizer.config import DEFAULT_FALLBACK_FOLDER
 from smart_file_organizer.models import PlannedMove, SemanticFolderRule
 from smart_file_organizer.semantic_rules import infer_destination_folder
 
@@ -19,7 +20,7 @@ def plan_file(
     target_root: Path,
     *,
     semantic_rules: Iterable[SemanticFolderRule] | None = None,
-    fallback_folder: str | None = None,
+    fallback_folder: str | None = DEFAULT_FALLBACK_FOLDER,
 ) -> PlannedMove:
     """Build a move plan for a single file without touching the filesystem."""
     return plan_file_with_document_text(
@@ -37,7 +38,7 @@ def plan_file_with_document_text(
     document_text: str,
     *,
     semantic_rules: Iterable[SemanticFolderRule] | None = None,
-    fallback_folder: str | None = None,
+    fallback_folder: str | None = DEFAULT_FALLBACK_FOLDER,
 ) -> PlannedMove:
     """Build a move plan using caller-provided document text."""
     category = classify_path(source)
@@ -64,7 +65,7 @@ def build_organization_plan(
     target_root: Path,
     *,
     semantic_rules: Iterable[SemanticFolderRule] | None = None,
-    fallback_folder: str | None = None,
+    fallback_folder: str | None = DEFAULT_FALLBACK_FOLDER,
 ) -> list[PlannedMove]:
     """Build move plans for multiple files without touching the filesystem."""
     return [
@@ -84,7 +85,7 @@ def build_organization_plan_with_document_texts(
     document_texts: Mapping[Path, str],
     *,
     semantic_rules: Iterable[SemanticFolderRule] | None = None,
-    fallback_folder: str | None = None,
+    fallback_folder: str | None = DEFAULT_FALLBACK_FOLDER,
 ) -> list[PlannedMove]:
     """Build move plans using caller-provided document text."""
     return [

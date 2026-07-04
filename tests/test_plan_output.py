@@ -29,14 +29,14 @@ def test_format_plan_text_joins_moves_with_trailing_newline() -> None:
         ),
         PlannedMove(
             source=Path("notes.txt"),
-            destination=Path("organized/documents/notes.txt"),
+            destination=Path("organized/documents/inbox/notes.txt"),
             category=FileCategory.DOCUMENTS,
         ),
     ]
 
     assert format_plan_text(plan) == (
         "photo.jpg -> organized/images/photo.jpg\n"
-        "notes.txt -> organized/documents/notes.txt\n"
+        "notes.txt -> organized/documents/inbox/notes.txt\n"
     )
 
 
@@ -53,7 +53,7 @@ def test_format_plan_json_includes_source_destination_and_category() -> None:
         ),
         PlannedMove(
             source=Path("notes.txt"),
-            destination=Path("organized/documents/notes.txt"),
+            destination=Path("organized/documents/inbox/notes.txt"),
             category=FileCategory.DOCUMENTS,
         ),
     ]
@@ -66,7 +66,7 @@ def test_format_plan_json_includes_source_destination_and_category() -> None:
         },
         {
             "source": "notes.txt",
-            "destination": "organized/documents/notes.txt",
+            "destination": "organized/documents/inbox/notes.txt",
             "category": "documents",
         },
     ]
