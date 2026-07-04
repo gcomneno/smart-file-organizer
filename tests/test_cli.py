@@ -7,21 +7,10 @@ from smart_file_organizer.cli import (
     build_parser,
     collect_sources,
     format_destination_conflicts,
-    format_planned_move,
     main,
 )
 from smart_file_organizer.core import FileCategory, PlannedMove
 from smart_file_organizer.errors import SourceSelectionError
-
-
-def test_format_planned_move() -> None:
-    move = PlannedMove(
-        source=Path("photo.jpg"),
-        destination=Path("organized/images/photo.jpg"),
-        category=FileCategory.IMAGES,
-    )
-
-    assert format_planned_move(move) == "photo.jpg -> organized/images/photo.jpg"
 
 
 def test_format_destination_conflicts() -> None:
@@ -112,6 +101,36 @@ def test_main_prints_organization_plan_from_explicit_sources(capsys) -> None:
         "photo.jpg -> organized/images/photo.jpg\n"
         "notes.txt -> organized/documents/notes.txt\n"
         "script.py -> organized/code/script.py\n"
+    )
+
+
+def test_main_prints_organization_plan_as_json(capsys) -> None:
+    main(
+        [
+            "--format",
+            "json",
+            "--target",
+            "organized",
+            "photo.jpg",
+            "notes.txt",
+        ]
+    )
+
+    captured = capsys.readouterr()
+
+    assert captured.out == (
+        "[\n"
+        '  {\n'
+        '    "source": "photo.jpg",\n'
+        '    "destination": "organized/images/photo.jpg",\n'
+        '    "category": "images"\n'
+        "  },\n"
+        '  {\n'
+        '    "source": "notes.txt",\n'
+        '    "destination": "organized/documents/notes.txt",\n'
+        '    "category": "documents"\n'
+        "  }\n"
+        "]\n"
     )
 
 
