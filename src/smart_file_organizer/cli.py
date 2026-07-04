@@ -26,7 +26,7 @@ from smart_file_organizer.errors import (
     SourceMissingError,
     SourceSelectionError,
 )
-from smart_file_organizer.plan_output import format_planned_move, render_plan_preview
+from smart_file_organizer.plan_output import render_plan_preview
 
 
 logger = logging.getLogger(__name__)
