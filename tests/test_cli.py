@@ -172,6 +172,49 @@ def test_main_prints_organization_plan_from_directory(
     )
 
 
+def test_main_recursive_scan_includes_nested_files(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    photo = tmp_path / "photo.jpg"
+    notes = tmp_path / "notes.txt"
+    nested_dir = tmp_path / "nested"
+    nested_file = nested_dir / "ignored.txt"
+
+    photo.write_text("fake image")
+    notes.write_text("hello")
+    nested_dir.mkdir()
+    nested_file.write_text("include me")
+
+    main(
+        [
+            "--from",
+            str(tmp_path),
+            "--recursive",
+            "--target",
+            "organized",
+        ]
+    )
+
+    captured = capsys.readouterr()
+
+    assert captured.out == (
+        f"{nested_file} -> organized/documents/ignored.txt\n"
+        f"{notes} -> organized/documents/notes.txt\n"
+        f"{photo} -> organized/images/photo.jpg\n"
+    )
+
+
+def test_main_rejects_recursive_without_source_directory(capsys) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        main(["--recursive", "photo.jpg"])
+
+    captured = capsys.readouterr()
+
+    assert exc_info.value.code == 2
+    assert "--recursive requires --from" in captured.err
+
+
 def test_main_dry_run_does_not_move_files(
     tmp_path: Path,
     capsys,
@@ -413,6 +456,16 @@ def test_collect_sources_raises_source_selection_error_for_conflicting_inputs(
         match="pass either --from or source files, not both",
     ):
         collect_sources(tmp_path, [Path("notes.txt")])
+
+
+def test_collect_sources_raises_source_selection_error_for_recursive_without_from() -> (
+    None
+):
+    with pytest.raises(
+        SourceSelectionError,
+        match="--recursive requires --from",
+    ):
+        collect_sources(None, [Path("notes.txt")], recursive=True)
 
 
 def test_main_is_quiet_by_default(capsys: pytest.CaptureFixture[str]) -> None:
