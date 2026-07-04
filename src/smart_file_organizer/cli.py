@@ -218,12 +218,14 @@ def main(argv: Sequence[str] | None = None) -> None:
         parser.error(str(error))
 
     semantic_rules = semantic_rules_from_config(config)
+    fallback_folder = config.fallback_folder if config is not None else None
 
     if args.inspect_content:
         plan = build_organization_plan_inspecting_content(
             sources,
             args.target,
             semantic_rules=semantic_rules,
+            fallback_folder=fallback_folder,
             verbose=args.verbose,
         )
     else:
@@ -231,6 +233,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             sources,
             args.target,
             semantic_rules=semantic_rules,
+            fallback_folder=fallback_folder,
         )
 
     logger.info(

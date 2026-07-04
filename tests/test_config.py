@@ -98,6 +98,46 @@ keywords = ["demo utility", "invoice"]
     )
 
 
+def test_parse_config_reads_fallback_folder() -> None:
+    config = parse_config(
+        {
+            "fallback_folder": "documents/inbox",
+            "semantic_rules": [
+                {
+                    "folder": "documents/demo-utility",
+                    "keywords": ["demo utility"],
+                },
+            ],
+        }
+    )
+
+    assert config == OrganizerConfig(
+        fallback_folder="documents/inbox",
+        semantic_rules=(
+            SemanticRule(
+                folder="documents/demo-utility",
+                keywords=("demo utility",),
+            ),
+        ),
+    )
+
+
+def test_load_config_reads_fallback_folder_from_toml(tmp_path: Path) -> None:
+    config_file = tmp_path / "smart-file-organizer.toml"
+    config_file.write_text(
+        """
+fallback_folder = "documents/inbox"
+
+[[semantic_rules]]
+folder = "documents/demo-utility"
+keywords = ["demo utility"]
+""",
+        encoding="utf-8",
+    )
+
+    assert load_config(config_file).fallback_folder == "documents/inbox"
+
+
 @pytest.mark.parametrize(
     ("raw_config", "message"),
     [
@@ -123,6 +163,8 @@ keywords = ["demo utility", "invoice"]
             {"semantic_rules": [{"folder": "documents/demo", "patterns": ["("]}]},
             "semantic rule pattern is invalid",
         ),
+        ({"fallback_folder": ""}, "fallback_folder must be a non-empty string"),
+        ({"fallback_folder": 123}, "fallback_folder must be a non-empty string"),
     ],
 )
 def test_parse_config_rejects_invalid_semantic_rules(

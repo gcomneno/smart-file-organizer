@@ -270,9 +270,6 @@ def _keyword_matches_search_text(
     match_target: MatchTarget,
 ) -> bool:
     """Return True when a keyword matches searchable text."""
-    if match_target == "path":
-        return keyword in search_text
-
     normalized_keyword = keyword.strip()
     if not normalized_keyword:
         return False
@@ -280,11 +277,12 @@ def _keyword_matches_search_text(
     if " " in normalized_keyword:
         return normalized_keyword in search_text
 
-    if normalized_keyword in _GENERIC_CONTENT_KEYWORDS:
-        return False
+    if match_target == "content":
+        if normalized_keyword in _GENERIC_CONTENT_KEYWORDS:
+            return False
 
-    if len(normalized_keyword) < _CONTENT_MIN_SINGLE_KEYWORD_LENGTH:
-        return False
+        if len(normalized_keyword) < _CONTENT_MIN_SINGLE_KEYWORD_LENGTH:
+            return False
 
     return _contains_whole_term(normalized_keyword, search_text)
 
@@ -333,11 +331,24 @@ def _match_semantic_folder(
     return None
 
 
+def _default_category_folder(
+    category: FileCategory,
+    *,
+    fallback_folder: str | None = None,
+) -> Path:
+    """Return the default folder when no semantic rule matches."""
+    if category == FileCategory.DOCUMENTS and fallback_folder:
+        return Path(fallback_folder)
+
+    return Path(category.value)
+
+
 def infer_destination_folder(
     path: Path,
     *,
     document_text: str = "",
     semantic_rules: Iterable[SemanticFolderRule] | None = None,
+    fallback_folder: str | None = None,
 ) -> Path:
     """Infer a semantic destination folder for a path."""
     rules = _normalize_semantic_rules(semantic_rules)
@@ -363,4 +374,4 @@ def infer_destination_folder(
         ):
             return content_semantic_folder
 
-    return Path(category.value)
+    return _default_category_folder(category, fallback_folder=fallback_folder)
