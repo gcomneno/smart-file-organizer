@@ -61,7 +61,12 @@ def _add_plan_arguments(parser: argparse.ArgumentParser) -> None:
         "--from",
         dest="source_root",
         type=Path,
-        help="Source directory to scan for direct files.",
+        help="Source directory to scan for files.",
+    )
+    parser.add_argument(
+        "--recursive",
+        action="store_true",
+        help="Scan nested directories when using --from. Disabled by default.",
     )
     parser.add_argument(
         "--target",
@@ -110,6 +115,8 @@ def _normalize_argv(argv: Sequence[str] | None) -> list[str]:
 def collect_sources(
     source_root: Path | None,
     explicit_sources: Sequence[Path],
+    *,
+    recursive: bool = False,
 ) -> list[Path]:
     """Collect source files from explicit arguments or a source directory."""
     if source_root is not None and explicit_sources:
@@ -117,6 +124,9 @@ def collect_sources(
 
     if source_root is None and not explicit_sources:
         raise SourceSelectionError("pass at least one source file or use --from")
+
+    if recursive and source_root is None:
+        raise SourceSelectionError("--recursive requires --from")
 
     if source_root is not None:
         if not source_root.exists():
@@ -127,7 +137,7 @@ def collect_sources(
         if not source_root.is_dir():
             raise SourceSelectionError(f"source path is not a directory: {source_root}")
 
-        return list_source_files(source_root)
+        return list_source_files(source_root, recursive=recursive)
 
     return list(explicit_sources)
 
@@ -173,7 +183,11 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
 
     try:
-        sources = collect_sources(args.source_root, args.sources)
+        sources = collect_sources(
+            args.source_root,
+            args.sources,
+            recursive=args.recursive,
+        )
         logger.info("event=sources_collected count=%s", len(sources))
 
         config = load_config(args.config) if args.config is not None else None
