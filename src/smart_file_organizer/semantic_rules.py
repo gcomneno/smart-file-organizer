@@ -159,11 +159,15 @@ def _path_search_text(path: Path) -> str:
 def _normalize_semantic_rules(
     semantic_rules: Iterable[tuple[str, tuple[str, ...]]] | None,
 ) -> tuple[SemanticFolderRule, ...]:
-    """Return caller-provided semantic rules or the built-in defaults."""
+    """Return built-in rules merged with caller-provided rules.
+
+    Built-in rules are evaluated first, then user rules, so default
+    classifications stay stable and custom rules extend coverage.
+    """
     if semantic_rules is None:
         return _SEMANTIC_FOLDER_RULES
 
-    return tuple(semantic_rules)
+    return _SEMANTIC_FOLDER_RULES + tuple(semantic_rules)
 
 
 def _match_semantic_folder(
