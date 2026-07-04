@@ -446,6 +446,27 @@ def test_infer_destination_folder_uses_document_text_for_generic_filename() -> N
     ) == Path("documents/taxes")
 
 
+def test_infer_destination_folder_ignores_generic_vehicle_terms_in_content() -> None:
+    assert infer_destination_folder(
+        Path("2612883212.pdf"),
+        document_text="Ricevuta di pagamento per servizi amministrativi\n",
+    ) == Path("documents")
+
+
+def test_infer_destination_folder_ignores_short_inps_terms_in_content() -> None:
+    assert infer_destination_folder(
+        Path("2612883212.pdf"),
+        document_text="Technical manual mentioning INPS acronyms in a footnote\n",
+    ) == Path("documents")
+
+
+def test_infer_destination_folder_uses_specific_phrases_in_content() -> None:
+    assert infer_destination_folder(
+        Path("2612883212.pdf"),
+        document_text="Modello attestazione DSU e prestazioni a sostegno del reddito\n",
+    ) == Path("documents/inps-sfl")
+
+
 def test_infer_destination_folder_uses_filename_when_text_is_empty() -> None:
     assert infer_destination_folder(
         Path("Conto-FASTWEB-M000000000-20260501.pdf"),

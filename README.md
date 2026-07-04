@@ -109,6 +109,8 @@ PDF content inspection works only for PDFs with extractable text. OCR for scanne
 
 Third-party PDF parser warnings are suppressed by default. Use `--verbose` to show them.
 
+Content-based semantic matching is stricter than filename matching: generic single-word keywords are ignored, and remaining single-word matches require whole-word hits in the extracted text.
+
 ### Apply the organization plan
 
 ~~~bash

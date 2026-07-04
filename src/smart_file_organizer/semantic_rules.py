@@ -1,10 +1,30 @@
 """Semantic destination rule helpers."""
 
+import re
 from collections.abc import Iterable
 from pathlib import Path
+from typing import Literal
 
 from smart_file_organizer.classification import classify_path
 from smart_file_organizer.models import FileCategory, SemanticFolderRule
+
+MatchTarget = Literal["path", "content"]
+
+_CONTENT_MIN_SINGLE_KEYWORD_LENGTH = 5
+
+_GENERIC_CONTENT_KEYWORDS = frozenset(
+    {
+        "adi",
+        "bollo",
+        "dsu",
+        "inps",
+        "isee",
+        "pol",
+        "poste",
+        "ricevuta",
+        "sfl",
+    }
+)
 
 
 _SEMANTIC_FOLDER_RULES: tuple[SemanticFolderRule, ...] = (
@@ -170,15 +190,55 @@ def _normalize_semantic_rules(
     return _SEMANTIC_FOLDER_RULES + tuple(semantic_rules)
 
 
+def _contains_whole_term(term: str, search_text: str) -> bool:
+    """Return True when a normalized term appears as a whole token."""
+    return re.search(rf"(?<!\w){re.escape(term)}(?!\w)", search_text) is not None
+
+
+def _keyword_matches_search_text(
+    keyword: str,
+    search_text: str,
+    *,
+    match_target: MatchTarget,
+) -> bool:
+    """Return True when a keyword matches searchable text."""
+    if match_target == "path":
+        return keyword in search_text
+
+    normalized_keyword = keyword.strip()
+    if not normalized_keyword:
+        return False
+
+    if " " in normalized_keyword:
+        return normalized_keyword in search_text
+
+    if normalized_keyword in _GENERIC_CONTENT_KEYWORDS:
+        return False
+
+    if len(normalized_keyword) < _CONTENT_MIN_SINGLE_KEYWORD_LENGTH:
+        return False
+
+    return _contains_whole_term(normalized_keyword, search_text)
+
+
 def _match_semantic_folder(
     search_text: str,
     semantic_rules: Iterable[tuple[str, tuple[str, ...]]] | None = None,
+    *,
+    match_target: MatchTarget = "path",
 ) -> Path | None:
     """Return the first semantic folder matching searchable text."""
     rules = _normalize_semantic_rules(semantic_rules)
 
     for folder, keywords in rules:
-        if any(keyword in search_text for keyword in keywords):
+        if any(
+            _keyword_matches_search_text(
+                keyword,
+                search_text,
+                match_target=match_target,
+            )
+            for keyword in keywords
+        ):
             return Path(folder)
 
     return None
@@ -210,6 +270,7 @@ def infer_destination_folder(
         if content_semantic_folder := _match_semantic_folder(
             content_search_text,
             rules,
+            match_target="content",
         ):
             return content_semantic_folder
 
