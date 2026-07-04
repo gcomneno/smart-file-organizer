@@ -6,6 +6,7 @@ from smart_file_organizer.models import (
     FileCategory,
     PlannedMove,
     SemanticFolderRule,
+    SemanticRuleDefinition,
 )
 from smart_file_organizer.planning import (
     build_organization_plan,
@@ -31,6 +32,7 @@ __all__ = [
     "FileCategory",
     "PlannedMove",
     "SemanticFolderRule",
+    "SemanticRuleDefinition",
     "_EXTENSION_CATEGORIES",
     "_SEMANTIC_FOLDER_RULES",
     "_match_semantic_folder",
