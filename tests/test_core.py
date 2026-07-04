@@ -487,6 +487,31 @@ def test_infer_destination_folder_does_not_classify_generic_verbale_as_health() 
     )
 
 
+def test_infer_destination_folder_does_not_match_acronyms_inside_path_words() -> None:
+    assert infer_destination_folder(
+        Path(
+            "Alicia Giménez-Bartlett/Serie Pedra Delicado/"
+            "Alicia Giménez-Bartlett - 2002. Serpenti Nel Paradiso.epub"
+        ),
+    ) == Path("books/fiction")
+
+
+def test_infer_destination_folder_uses_fallback_folder_for_unmatched_documents() -> (
+    None
+):
+    assert infer_destination_folder(
+        Path("verbale-definitivo-2026.pdf"),
+        fallback_folder="documents/inbox",
+    ) == Path("documents/inbox")
+
+
+def test_infer_destination_folder_keeps_category_fallback_for_non_documents() -> None:
+    assert infer_destination_folder(
+        Path("mystery.xyz"),
+        fallback_folder="documents/inbox",
+    ) == Path("other")
+
+
 def test_infer_destination_folder_keeps_book_signal_over_text() -> None:
     assert infer_destination_folder(
         Path("Hacking Secret Ciphers with Python.pdf"),

@@ -250,9 +250,19 @@ patterns = ["\\d{8} demo report \\d+"]
 
 Each rule must define `keywords`, `patterns`, or both. Regex patterns apply to file paths during filename matching. They do not apply to `--inspect-content` text matching in this version.
 
+Single-word keywords match as whole tokens in normalized path text, so short acronyms such as `adi` do not match inside unrelated words like `paradiso`. Multi-word phrases still use substring matching because they are already specific enough.
+
 Configured rules **extend** the built-in semantic rules; they do not replace them. Built-in rules are evaluated first, then rules from the TOML file, so default categories such as taxes, utilities, and insurance keep working while you add local keywords.
 
 When a keyword from either built-in or configured rules matches the file path or inspected document text, the matching folder is used as the destination subfolder.
+
+Use `fallback_folder` to send unmatched documents to a dedicated inbox instead of the generic `documents/` folder:
+
+~~~toml
+fallback_folder = "documents/inbox"
+~~~
+
+The fallback applies only to documents without a semantic match. Other categories such as images, audio, and `other` keep their default folders.
 
 Private configuration files should not be committed. Use `smart-file-organizer.example.toml` as a public template and keep local/private rules in `smart-file-organizer.toml` or under ignored paths such as `.local-data/`.
 

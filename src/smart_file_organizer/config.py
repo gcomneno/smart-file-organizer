@@ -24,6 +24,7 @@ class OrganizerConfig:
     """Application configuration loaded from a TOML file."""
 
     semantic_rules: tuple[SemanticRule, ...] = ()
+    fallback_folder: str | None = None
 
 
 def load_config(path: Path) -> OrganizerConfig:
@@ -42,7 +43,21 @@ def parse_config(data: Mapping[str, Any]) -> OrganizerConfig:
 
     return OrganizerConfig(
         semantic_rules=tuple(_parse_semantic_rule(rule) for rule in raw_rules),
+        fallback_folder=_parse_fallback_folder(data),
     )
+
+
+def _parse_fallback_folder(data: Mapping[str, Any]) -> str | None:
+    """Parse optional fallback folder from raw TOML data."""
+    fallback_folder = data.get("fallback_folder")
+
+    if fallback_folder is None:
+        return None
+
+    if not isinstance(fallback_folder, str) or not fallback_folder.strip():
+        raise ConfigError("fallback_folder must be a non-empty string")
+
+    return fallback_folder.strip()
 
 
 def _parse_semantic_rule(data: object) -> SemanticRule:
