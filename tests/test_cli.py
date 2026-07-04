@@ -48,6 +48,7 @@ def test_main_inspect_content_uses_content_aware_plan(
         target_root: Path,
         *,
         semantic_rules=None,
+        verbose=False,
     ) -> list[PlannedMove]:
         nonlocal recorded_target
         recorded_sources.extend(sources)

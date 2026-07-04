@@ -53,7 +53,7 @@ def test_build_organization_plan_inspecting_content_uses_default_extractor(
 ) -> None:
     extracted_paths: list[Path] = []
 
-    def fake_extract_document_text(path: Path) -> str:
+    def fake_extract_document_text(path: Path, *, verbose: bool = False) -> str:
         extracted_paths.append(path)
 
         if path == Path("generic.pdf"):

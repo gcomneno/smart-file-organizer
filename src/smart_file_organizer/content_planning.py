@@ -37,11 +37,12 @@ def build_organization_plan_inspecting_content(
     target_root: Path,
     *,
     semantic_rules: Iterable[SemanticFolderRule] | None = None,
+    verbose: bool = False,
 ) -> list[PlannedMove]:
     """Build move plans using the default document text extractor."""
     return build_organization_plan_with_extracted_text(
         sources,
         target_root,
-        extract_text=extract_document_text,
+        extract_text=lambda path: extract_document_text(path, verbose=verbose),
         semantic_rules=semantic_rules,
     )
