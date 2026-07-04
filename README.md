@@ -163,6 +163,39 @@ Before applying a plan, the program checks that:
 
 If any of these checks fail, the command stops with an error.
 
+## Output format
+
+By default, `plan` prints one move per line:
+
+~~~text
+photo.jpg -> organized/images/photo.jpg
+~~~
+
+Use `--format json` for structured preview output:
+
+~~~bash
+uv run smart-file-organizer plan --format json --target organized photo.jpg notes.txt
+~~~
+
+Example JSON output:
+
+~~~json
+[
+  {
+    "source": "photo.jpg",
+    "destination": "organized/images/photo.jpg",
+    "category": "images"
+  },
+  {
+    "source": "notes.txt",
+    "destination": "organized/documents/notes.txt",
+    "category": "documents"
+  }
+]
+~~~
+
+JSON preview applies to dry-run output only. `--apply` does not print the plan.
+
 ## Configuration
 
 You can pass an optional TOML configuration file with semantic destination rules:
@@ -238,6 +271,7 @@ src/smart_file_organizer/
 ├── document_text.py
 ├── errors.py
 ├── models.py
+├── plan_output.py
 ├── planning.py
 └── semantic_rules.py
 
@@ -246,12 +280,15 @@ tests/
 ├── test_config.py
 ├── test_content_planning.py
 ├── test_core.py
-└── test_document_text.py
+├── test_document_text.py
+└── test_plan_output.py
 ~~~
 
 `core.py` keeps compatibility exports for the original public core imports.
 
 `models.py` contains shared domain models and type aliases.
+
+`plan_output.py` contains plan preview formatters for text and JSON output.
 
 `classification.py` contains extension-based file classification.
 
