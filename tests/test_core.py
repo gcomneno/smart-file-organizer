@@ -496,7 +496,9 @@ def test_infer_destination_folder_does_not_match_acronyms_inside_path_words() ->
     ) == Path("books/fiction")
 
 
-def test_infer_destination_folder_uses_fallback_folder_for_unmatched_documents() -> None:
+def test_infer_destination_folder_uses_fallback_folder_for_unmatched_documents() -> (
+    None
+):
     assert infer_destination_folder(
         Path("verbale-definitivo-2026.pdf"),
         fallback_folder="documents/inbox",
