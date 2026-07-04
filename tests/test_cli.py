@@ -120,12 +120,12 @@ def test_main_prints_organization_plan_as_json(capsys) -> None:
 
     assert captured.out == (
         "[\n"
-        '  {\n'
+        "  {\n"
         '    "source": "photo.jpg",\n'
         '    "destination": "organized/images/photo.jpg",\n'
         '    "category": "images"\n'
         "  },\n"
-        '  {\n'
+        "  {\n"
         '    "source": "notes.txt",\n'
         '    "destination": "organized/documents/notes.txt",\n'
         '    "category": "documents"\n'
