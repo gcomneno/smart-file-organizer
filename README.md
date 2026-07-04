@@ -172,7 +172,9 @@ folder = "documents/demo-utility"
 keywords = ["synthetic invoice", "demo utility"]
 ~~~
 
-When a configured keyword matches the file path or inspected document text, the configured folder is used as the destination subfolder.
+Configured rules **extend** the built-in semantic rules; they do not replace them. Built-in rules are evaluated first, then rules from the TOML file, so default categories such as taxes, utilities, and insurance keep working while you add local keywords.
+
+When a keyword from either built-in or configured rules matches the file path or inspected document text, the matching folder is used as the destination subfolder.
 
 Private configuration files should not be committed. Use `smart-file-organizer.example.toml` as a public template and keep local/private rules in `smart-file-organizer.toml` or under ignored paths such as `.local-data/`.
 
