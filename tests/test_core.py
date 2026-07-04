@@ -5,6 +5,7 @@ import pytest
 from smart_file_organizer.core import (
     FileCategory,
     PlannedMove,
+    SemanticRuleDefinition,
     _SEMANTIC_FOLDER_RULES,
     _normalize_semantic_rules,
     build_organization_plan,
@@ -566,7 +567,9 @@ def test_infer_destination_folder_uses_filename_when_text_is_empty() -> None:
 
 
 def test_normalize_semantic_rules_returns_builtins_without_config() -> None:
-    assert _normalize_semantic_rules(None) == _SEMANTIC_FOLDER_RULES
+    rules = _normalize_semantic_rules(None)
+    assert len(rules) == len(_SEMANTIC_FOLDER_RULES)
+    assert rules[0].folder == "documents/utilities/fastweb"
     assert infer_destination_folder(
         Path("Conto-FASTWEB-M000000000-20260501.pdf"),
         semantic_rules=None,
@@ -575,9 +578,9 @@ def test_normalize_semantic_rules_returns_builtins_without_config() -> None:
 
 def test_normalize_semantic_rules_merges_user_rules_with_builtins() -> None:
     user_rules = (
-        (
-            "documents/demo-utility",
-            ("synthetic invoice",),
+        SemanticRuleDefinition(
+            folder="documents/demo-utility",
+            keywords=("synthetic invoice",),
         ),
     )
     merged = _normalize_semantic_rules(user_rules)
@@ -590,15 +593,15 @@ def test_normalize_semantic_rules_merges_user_rules_with_builtins() -> None:
         Path("Conto-FASTWEB-M000000000-20260501.pdf"),
         semantic_rules=user_rules,
     ) == Path("documents/utilities/fastweb")
-    assert merged[: len(_SEMANTIC_FOLDER_RULES)] == _SEMANTIC_FOLDER_RULES
-    assert merged[len(_SEMANTIC_FOLDER_RULES) :] == user_rules
+    assert len(merged) == len(_SEMANTIC_FOLDER_RULES) + len(user_rules)
+    assert merged[len(_SEMANTIC_FOLDER_RULES)].folder == "documents/demo-utility"
 
 
 def test_infer_destination_folder_uses_configured_semantic_rules() -> None:
     rules = (
-        (
-            "documents/demo-utility",
-            ("demo utility", "synthetic invoice"),
+        SemanticRuleDefinition(
+            folder="documents/demo-utility",
+            keywords=("demo utility", "synthetic invoice"),
         ),
     )
 
@@ -608,11 +611,41 @@ def test_infer_destination_folder_uses_configured_semantic_rules() -> None:
     ) == Path("documents/demo-utility")
 
 
+def test_infer_destination_folder_uses_configured_regex_patterns() -> None:
+    rules = (
+        SemanticRuleDefinition(
+            folder="documents/analisi-mediche",
+            patterns=(r"\d{8} analisi ade \d+",),
+        ),
+    )
+
+    assert infer_destination_folder(
+        Path("20260626_analisi_ade_1.pdf"),
+        semantic_rules=rules,
+    ) == Path("documents/analisi-mediche")
+
+
+def test_infer_destination_folder_uses_regex_patterns_for_author_prefixed_books() -> (
+    None
+):
+    rules = (
+        SemanticRuleDefinition(
+            folder="books/fiction/alicia-gimenez-bartlett",
+            patterns=(r"^alicia gim[eé]nez bartlett \d{4} ",),
+        ),
+    )
+
+    assert infer_destination_folder(
+        Path("Alicia Giménez-Bartlett - 2004. Un bastimento carico di riso.txt"),
+        semantic_rules=rules,
+    ) == Path("books/fiction/alicia-gimenez-bartlett")
+
+
 def test_plan_file_uses_configured_semantic_rules() -> None:
     rules = (
-        (
-            "documents/demo-utility",
-            ("synthetic invoice",),
+        SemanticRuleDefinition(
+            folder="documents/demo-utility",
+            keywords=("synthetic invoice",),
         ),
     )
 
@@ -630,9 +663,9 @@ def test_plan_file_uses_configured_semantic_rules() -> None:
 def test_build_organization_plan_with_document_texts_uses_configured_rules() -> None:
     source = Path("notes.txt")
     rules = (
-        (
-            "learning/demo-course",
-            ("demo course",),
+        SemanticRuleDefinition(
+            folder="learning/demo-course",
+            keywords=("demo course",),
         ),
     )
 

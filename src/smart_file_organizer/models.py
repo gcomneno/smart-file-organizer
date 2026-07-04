@@ -27,5 +27,15 @@ class PlannedMove:
     category: FileCategory
 
 
-SemanticFolderRule = tuple[str, tuple[str, ...]]
+@dataclass(frozen=True)
+class SemanticRuleDefinition:
+    """A semantic destination rule with keyword and optional regex patterns."""
+
+    folder: str
+    keywords: tuple[str, ...] = ()
+    patterns: tuple[str, ...] = ()
+
+
+# Backward-compatible alias for keyword-only rules passed as tuples in tests.
+SemanticFolderRule = SemanticRuleDefinition | tuple[str, tuple[str, ...]]
 ConflictStrategy = Literal["fail", "rename"]

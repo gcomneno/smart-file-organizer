@@ -13,7 +13,7 @@ from smart_file_organizer.content_planning import (
 )
 from smart_file_organizer.core import (
     PlannedMove,
-    SemanticFolderRule,
+    SemanticRuleDefinition,
     build_organization_plan,
     execute_plan,
     find_destination_conflicts,
@@ -161,12 +161,19 @@ def collect_sources(
 
 def semantic_rules_from_config(
     config: OrganizerConfig | None,
-) -> tuple[SemanticFolderRule, ...] | None:
+) -> tuple[SemanticRuleDefinition, ...] | None:
     """Return semantic rules from loaded configuration."""
     if config is None:
         return None
 
-    return tuple((rule.folder, rule.keywords) for rule in config.semantic_rules)
+    return tuple(
+        SemanticRuleDefinition(
+            folder=rule.folder,
+            keywords=rule.keywords,
+            patterns=rule.patterns,
+        )
+        for rule in config.semantic_rules
+    )
 
 
 def format_destination_conflicts(

@@ -1,5 +1,6 @@
 """Configuration loading for smart-file-organizer."""
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,7 +15,8 @@ class SemanticRule:
     """A configurable semantic destination rule."""
 
     folder: str
-    keywords: tuple[str, ...]
+    keywords: tuple[str, ...] = ()
+    patterns: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -49,13 +51,23 @@ def _parse_semantic_rule(data: object) -> SemanticRule:
         raise ConfigError("semantic rule must be a table")
 
     folder = data.get("folder")
-    keywords = data.get("keywords")
+    keywords = data.get("keywords", [])
+    patterns = data.get("patterns", [])
 
     if not isinstance(folder, str) or not folder.strip():
         raise ConfigError("semantic rule folder must be a non-empty string")
 
-    if not isinstance(keywords, list) or not keywords:
-        raise ConfigError("semantic rule keywords must be a non-empty list")
+    if keywords is None:
+        keywords = []
+
+    if patterns is None:
+        patterns = []
+
+    if not isinstance(keywords, list):
+        raise ConfigError("semantic rule keywords must be a list")
+
+    if not isinstance(patterns, list):
+        raise ConfigError("semantic rule patterns must be a list")
 
     parsed_keywords: list[str] = []
     for keyword in keywords:
@@ -64,7 +76,23 @@ def _parse_semantic_rule(data: object) -> SemanticRule:
 
         parsed_keywords.append(keyword)
 
+    parsed_patterns: list[str] = []
+    for pattern in patterns:
+        if not isinstance(pattern, str) or not pattern.strip():
+            raise ConfigError("semantic rule patterns must be non-empty strings")
+
+        try:
+            re.compile(pattern)
+        except re.error as error:
+            raise ConfigError(f"semantic rule pattern is invalid: {error}") from error
+
+        parsed_patterns.append(pattern)
+
+    if not parsed_keywords and not parsed_patterns:
+        raise ConfigError("semantic rule must define keywords and/or patterns")
+
     return SemanticRule(
         folder=folder,
         keywords=tuple(parsed_keywords),
+        patterns=tuple(parsed_patterns),
     )

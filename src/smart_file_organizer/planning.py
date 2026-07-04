@@ -10,18 +10,15 @@ from smart_file_organizer.errors import (
     DestinationExistsError,
     SourceMissingError,
 )
-from smart_file_organizer.models import PlannedMove
-from smart_file_organizer.semantic_rules import (
-    _normalize_semantic_rules,
-    infer_destination_folder,
-)
+from smart_file_organizer.models import PlannedMove, SemanticFolderRule
+from smart_file_organizer.semantic_rules import infer_destination_folder
 
 
 def plan_file(
     source: Path,
     target_root: Path,
     *,
-    semantic_rules: Iterable[tuple[str, tuple[str, ...]]] | None = None,
+    semantic_rules: Iterable[SemanticFolderRule] | None = None,
 ) -> PlannedMove:
     """Build a move plan for a single file without touching the filesystem."""
     return plan_file_with_document_text(
@@ -37,7 +34,7 @@ def plan_file_with_document_text(
     target_root: Path,
     document_text: str,
     *,
-    semantic_rules: Iterable[tuple[str, tuple[str, ...]]] | None = None,
+    semantic_rules: Iterable[SemanticFolderRule] | None = None,
 ) -> PlannedMove:
     """Build a move plan using caller-provided document text."""
     category = classify_path(source)
@@ -62,12 +59,13 @@ def build_organization_plan(
     sources: Iterable[Path],
     target_root: Path,
     *,
-    semantic_rules: Iterable[tuple[str, tuple[str, ...]]] | None = None,
+    semantic_rules: Iterable[SemanticFolderRule] | None = None,
 ) -> list[PlannedMove]:
     """Build move plans for multiple files without touching the filesystem."""
-    rules = _normalize_semantic_rules(semantic_rules)
-
-    return [plan_file(source, target_root, semantic_rules=rules) for source in sources]
+    return [
+        plan_file(source, target_root, semantic_rules=semantic_rules)
+        for source in sources
+    ]
 
 
 def build_organization_plan_with_document_texts(
@@ -75,17 +73,15 @@ def build_organization_plan_with_document_texts(
     target_root: Path,
     document_texts: Mapping[Path, str],
     *,
-    semantic_rules: Iterable[tuple[str, tuple[str, ...]]] | None = None,
+    semantic_rules: Iterable[SemanticFolderRule] | None = None,
 ) -> list[PlannedMove]:
     """Build move plans using caller-provided document text."""
-    rules = _normalize_semantic_rules(semantic_rules)
-
     return [
         plan_file_with_document_text(
             source,
             target_root,
             document_texts.get(source, ""),
-            semantic_rules=rules,
+            semantic_rules=semantic_rules,
         )
         for source in sources
     ]
