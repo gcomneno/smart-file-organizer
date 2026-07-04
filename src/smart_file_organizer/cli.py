@@ -26,6 +26,7 @@ from smart_file_organizer.errors import (
     SourceMissingError,
     SourceSelectionError,
 )
+from smart_file_organizer.plan_output import render_plan_preview
 
 
 logger = logging.getLogger(__name__)
@@ -97,6 +98,12 @@ def _add_plan_arguments(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="Enable high-level application logging.",
     )
+    parser.add_argument(
+        "--format",
+        choices=("text", "json"),
+        default="text",
+        help="Output format for plan preview. Defaults to text.",
+    )
 
 
 def _normalize_argv(argv: Sequence[str] | None) -> list[str]:
@@ -150,11 +157,6 @@ def semantic_rules_from_config(
         return None
 
     return tuple((rule.folder, rule.keywords) for rule in config.semantic_rules)
-
-
-def format_planned_move(move: PlannedMove) -> str:
-    """Format a planned move for terminal output."""
-    return f"{move.source} -> {move.destination}"
 
 
 def format_destination_conflicts(
@@ -237,5 +239,4 @@ def main(argv: Sequence[str] | None = None) -> None:
         logger.info("event=plan_applied count=%s", len(plan))
         return
 
-    for move in plan:
-        print(format_planned_move(move))
+    sys.stdout.write(render_plan_preview(plan, output_format=args.format))
