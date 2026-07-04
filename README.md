@@ -107,6 +107,8 @@ Currently supported document text sources:
 
 PDF content inspection works only for PDFs with extractable text. OCR for scanned documents is not implemented yet.
 
+Third-party PDF parser warnings are suppressed by default. Use `--verbose` to show them.
+
 ### Apply the organization plan
 
 ~~~bash

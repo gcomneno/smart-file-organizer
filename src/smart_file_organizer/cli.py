@@ -207,6 +207,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             sources,
             args.target,
             semantic_rules=semantic_rules,
+            verbose=args.verbose,
         )
     else:
         plan = build_organization_plan(
