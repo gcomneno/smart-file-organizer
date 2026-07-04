@@ -130,6 +130,26 @@ def test_list_source_files_returns_only_direct_files(tmp_path: Path) -> None:
     ]
 
 
+def test_list_source_files_includes_nested_files_when_recursive(
+    tmp_path: Path,
+) -> None:
+    image = tmp_path / "photo.jpg"
+    notes = tmp_path / "notes.txt"
+    nested_dir = tmp_path / "nested"
+    nested_file = nested_dir / "ignored.txt"
+
+    image.write_text("fake image")
+    notes.write_text("hello")
+    nested_dir.mkdir()
+    nested_file.write_text("include me")
+
+    assert list_source_files(tmp_path, recursive=True) == [
+        nested_file,
+        notes,
+        image,
+    ]
+
+
 def test_find_destination_conflicts_returns_empty_for_unique_destinations() -> None:
     plan = [
         PlannedMove(

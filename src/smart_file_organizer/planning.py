@@ -91,8 +91,11 @@ def build_organization_plan_with_document_texts(
     ]
 
 
-def list_source_files(source_root: Path) -> list[Path]:
-    """Return direct files contained in a source directory."""
+def list_source_files(source_root: Path, *, recursive: bool = False) -> list[Path]:
+    """Return files contained in a source directory."""
+    if recursive:
+        return sorted(path for path in source_root.rglob("*") if path.is_file())
+
     return sorted(path for path in source_root.iterdir() if path.is_file())
 
 

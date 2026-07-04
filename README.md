@@ -76,9 +76,19 @@ This does not move files.
 uv run smart-file-organizer --from /path/to/source --target /path/to/organized
 ~~~
 
-The command scans only direct files in the source directory. It does not scan nested directories yet.
+The command scans only direct files in the source directory by default.
 
 This does not move files.
+
+### Recursive directory scan
+
+Use `--recursive` with `--from` to include files from nested directories:
+
+~~~bash
+uv run smart-file-organizer --from /path/to/source --recursive --target /path/to/organized
+~~~
+
+Only files are included; directories themselves are not moved.
 
 ### Dry run with content inspection
 
@@ -208,7 +218,7 @@ Synthetic examples are preferred for tests and documentation.
 ## Current limitations
 
 - Content inspection is opt-in and currently limited to supported document types.
-- Directory scanning is not recursive.
+- Directory scanning is non-recursive by default; use `--recursive` to include nested files.
 - Existing destination files are never overwritten.
 - There is no rename strategy for conflicts yet.
 - Configuration currently supports semantic TOML rules only.
