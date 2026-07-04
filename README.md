@@ -240,7 +240,15 @@ Example configuration:
 [[semantic_rules]]
 folder = "documents/demo-utility"
 keywords = ["synthetic invoice", "demo utility"]
+
+# Optional regex patterns match normalized path text.
+# Separators such as "_", "-", and "." become spaces before matching.
+[[semantic_rules]]
+folder = "documents/demo-dated-reports"
+patterns = ["\\d{8} demo report \\d+"]
 ~~~
+
+Each rule must define `keywords`, `patterns`, or both. Regex patterns apply to file paths during filename matching. They do not apply to `--inspect-content` text matching in this version.
 
 Configured rules **extend** the built-in semantic rules; they do not replace them. Built-in rules are evaluated first, then rules from the TOML file, so default categories such as taxes, utilities, and insurance keep working while you add local keywords.
 

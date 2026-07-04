@@ -518,6 +518,37 @@ keywords = ["synthetic invoice"]
     )
 
 
+def test_main_uses_configured_regex_patterns(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config_file = tmp_path / "smart-file-organizer.toml"
+    config_file.write_text(
+        """
+[[semantic_rules]]
+folder = "documents/analisi-mediche"
+patterns = ['\\d{8} analisi ade \\d+']
+""",
+        encoding="utf-8",
+    )
+    report = tmp_path / "20260626_analisi_ade_1.pdf"
+    report.write_text("demo")
+
+    main(
+        [
+            "--config",
+            str(config_file),
+            "--target",
+            "organized",
+            str(report),
+        ]
+    )
+
+    assert capsys.readouterr().out == (
+        f"{report} -> organized/documents/analisi-mediche/20260626_analisi_ade_1.pdf\n"
+    )
+
+
 def test_main_reports_invalid_config(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],

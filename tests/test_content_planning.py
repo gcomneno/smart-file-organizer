@@ -7,7 +7,7 @@ from smart_file_organizer.content_planning import (
     build_organization_plan_inspecting_content,
     build_organization_plan_with_extracted_text,
 )
-from smart_file_organizer.core import FileCategory, PlannedMove
+from smart_file_organizer.core import FileCategory, PlannedMove, SemanticRuleDefinition
 
 
 def test_build_organization_plan_with_extracted_text_uses_injected_extractor() -> None:
@@ -96,9 +96,9 @@ def test_build_organization_plan_inspecting_content_uses_default_extractor(
 def test_build_organization_plan_with_extracted_text_uses_configured_rules() -> None:
     source = Path("notes.txt")
     rules = (
-        (
-            "learning/demo-course",
-            ("demo course",),
+        SemanticRuleDefinition(
+            folder="learning/demo-course",
+            keywords=("demo course",),
         ),
     )
 

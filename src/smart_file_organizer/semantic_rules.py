@@ -2,11 +2,16 @@
 
 import re
 from collections.abc import Iterable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
 from smart_file_organizer.classification import classify_path
-from smart_file_organizer.models import FileCategory, SemanticFolderRule
+from smart_file_organizer.models import (
+    FileCategory,
+    SemanticFolderRule,
+    SemanticRuleDefinition,
+)
 
 MatchTarget = Literal["path", "content"]
 
@@ -25,6 +30,15 @@ _GENERIC_CONTENT_KEYWORDS = frozenset(
         "sfl",
     }
 )
+
+
+@dataclass(frozen=True)
+class _CompiledSemanticRule:
+    """A semantic rule with compiled regex patterns."""
+
+    folder: str
+    keywords: tuple[str, ...]
+    compiled_patterns: tuple[re.Pattern[str], ...]
 
 
 _SEMANTIC_FOLDER_RULES: tuple[SemanticFolderRule, ...] = (
@@ -200,18 +214,48 @@ def _path_search_text(path: Path) -> str:
     return _normalize_search_text(" ".join(path.parts))
 
 
+def _coerce_semantic_rule(rule: SemanticFolderRule) -> SemanticRuleDefinition:
+    """Return a semantic rule definition from supported rule shapes."""
+    if isinstance(rule, SemanticRuleDefinition):
+        return rule
+
+    folder, keywords = rule
+    return SemanticRuleDefinition(folder=folder, keywords=keywords)
+
+
+def _compile_semantic_rule(rule: SemanticRuleDefinition) -> _CompiledSemanticRule:
+    """Compile regex patterns for a semantic rule."""
+    return _CompiledSemanticRule(
+        folder=rule.folder,
+        keywords=rule.keywords,
+        compiled_patterns=tuple(re.compile(pattern) for pattern in rule.patterns),
+    )
+
+
 def _normalize_semantic_rules(
-    semantic_rules: Iterable[tuple[str, tuple[str, ...]]] | None,
-) -> tuple[SemanticFolderRule, ...]:
+    semantic_rules: Iterable[SemanticFolderRule] | None,
+) -> tuple[_CompiledSemanticRule, ...]:
     """Return built-in rules merged with caller-provided rules.
 
     Built-in rules are evaluated first, then user rules, so default
     classifications stay stable and custom rules extend coverage.
     """
     if semantic_rules is None:
-        return _SEMANTIC_FOLDER_RULES
+        return tuple(
+            _compile_semantic_rule(_coerce_semantic_rule(rule))
+            for rule in _SEMANTIC_FOLDER_RULES
+        )
 
-    return _SEMANTIC_FOLDER_RULES + tuple(semantic_rules)
+    user_rules = tuple(
+        _compile_semantic_rule(_coerce_semantic_rule(rule)) for rule in semantic_rules
+    )
+    return (
+        tuple(
+            _compile_semantic_rule(_coerce_semantic_rule(rule))
+            for rule in _SEMANTIC_FOLDER_RULES
+        )
+        + user_rules
+    )
 
 
 def _contains_whole_term(term: str, search_text: str) -> bool:
@@ -245,25 +289,46 @@ def _keyword_matches_search_text(
     return _contains_whole_term(normalized_keyword, search_text)
 
 
+def _pattern_matches_search_text(
+    pattern: re.Pattern[str],
+    search_text: str,
+) -> bool:
+    """Return True when a regex pattern matches searchable text."""
+    return pattern.search(search_text) is not None
+
+
+def _rule_matches_search_text(
+    rule: _CompiledSemanticRule,
+    search_text: str,
+    *,
+    match_target: MatchTarget,
+) -> bool:
+    """Return True when a semantic rule matches searchable text."""
+    if any(
+        _keyword_matches_search_text(keyword, search_text, match_target=match_target)
+        for keyword in rule.keywords
+    ):
+        return True
+
+    if match_target == "path":
+        return any(
+            _pattern_matches_search_text(pattern, search_text)
+            for pattern in rule.compiled_patterns
+        )
+
+    return False
+
+
 def _match_semantic_folder(
     search_text: str,
-    semantic_rules: Iterable[tuple[str, tuple[str, ...]]] | None = None,
+    rules: tuple[_CompiledSemanticRule, ...],
     *,
     match_target: MatchTarget = "path",
 ) -> Path | None:
     """Return the first semantic folder matching searchable text."""
-    rules = _normalize_semantic_rules(semantic_rules)
-
-    for folder, keywords in rules:
-        if any(
-            _keyword_matches_search_text(
-                keyword,
-                search_text,
-                match_target=match_target,
-            )
-            for keyword in keywords
-        ):
-            return Path(folder)
+    for rule in rules:
+        if _rule_matches_search_text(rule, search_text, match_target=match_target):
+            return Path(rule.folder)
 
     return None
 
@@ -272,7 +337,7 @@ def infer_destination_folder(
     path: Path,
     *,
     document_text: str = "",
-    semantic_rules: Iterable[tuple[str, tuple[str, ...]]] | None = None,
+    semantic_rules: Iterable[SemanticFolderRule] | None = None,
 ) -> Path:
     """Infer a semantic destination folder for a path."""
     rules = _normalize_semantic_rules(semantic_rules)
