@@ -321,6 +321,75 @@ def test_main_rejects_destination_conflicts(capsys) -> None:
     assert "folder-b/photo.jpg" in captured.err
 
 
+def test_main_resolves_destination_conflicts_with_rename_strategy(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    folder_a = tmp_path / "folder-a"
+    folder_b = tmp_path / "folder-b"
+    folder_a.mkdir()
+    folder_b.mkdir()
+
+    photo_a = folder_a / "photo.jpg"
+    photo_b = folder_b / "photo.jpg"
+    photo_a.write_text("first")
+    photo_b.write_text("second")
+
+    target_root = tmp_path / "organized"
+
+    main(
+        [
+            "--conflict-strategy",
+            "rename",
+            "--target",
+            str(target_root),
+            str(photo_a),
+            str(photo_b),
+        ]
+    )
+
+    captured = capsys.readouterr()
+
+    assert captured.out == (
+        f"{photo_a} -> {target_root}/images/photo.jpg\n"
+        f"{photo_b} -> {target_root}/images/photo__folder-b.jpg\n"
+    )
+
+
+def test_main_applies_organization_plan_with_rename_strategy(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    folder_a = tmp_path / "folder-a"
+    folder_b = tmp_path / "folder-b"
+    target_root = tmp_path / "organized"
+    folder_a.mkdir()
+    folder_b.mkdir()
+
+    photo_a = folder_a / "photo.jpg"
+    photo_b = folder_b / "photo.jpg"
+    photo_a.write_text("first")
+    photo_b.write_text("second")
+
+    main(
+        [
+            "--conflict-strategy",
+            "rename",
+            "--target",
+            str(target_root),
+            "--apply",
+            str(photo_a),
+            str(photo_b),
+        ]
+    )
+
+    captured = capsys.readouterr()
+
+    assert captured.err == ""
+    assert (target_root / "images" / "photo.jpg").read_text() == "first"
+    assert (target_root / "images" / "photo__folder-b.jpg").read_text() == "second"
+
+
 def test_main_applies_organization_plan(
     tmp_path: Path,
     capsys,
