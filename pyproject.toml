@@ -1,6 +1,6 @@
 [project]
 name = "smart-file-organizer"
-version = "0.3.2"
+version = "0.3.3"
 description = "A safe Python CLI for planning and applying file organization workflows."
 readme = "README.md"
 authors = [

@@ -10,6 +10,9 @@ import tomllib
 from smart_file_organizer.errors import ConfigError
 
 
+DEFAULT_FALLBACK_FOLDER = "documents/inbox"
+
+
 @dataclass(frozen=True)
 class SemanticRule:
     """A configurable semantic destination rule."""
@@ -24,7 +27,7 @@ class OrganizerConfig:
     """Application configuration loaded from a TOML file."""
 
     semantic_rules: tuple[SemanticRule, ...] = ()
-    fallback_folder: str | None = None
+    fallback_folder: str = DEFAULT_FALLBACK_FOLDER
 
 
 def load_config(path: Path) -> OrganizerConfig:
@@ -47,12 +50,9 @@ def parse_config(data: Mapping[str, Any]) -> OrganizerConfig:
     )
 
 
-def _parse_fallback_folder(data: Mapping[str, Any]) -> str | None:
-    """Parse optional fallback folder from raw TOML data."""
-    fallback_folder = data.get("fallback_folder")
-
-    if fallback_folder is None:
-        return None
+def _parse_fallback_folder(data: Mapping[str, Any]) -> str:
+    """Parse fallback folder from raw TOML data."""
+    fallback_folder = data.get("fallback_folder", DEFAULT_FALLBACK_FOLDER)
 
     if not isinstance(fallback_folder, str) or not fallback_folder.strip():
         raise ConfigError("fallback_folder must be a non-empty string")
