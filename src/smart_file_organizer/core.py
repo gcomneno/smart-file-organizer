@@ -1,7 +1,12 @@
 """Compatibility exports for core file organization logic."""
 
 from smart_file_organizer.classification import _EXTENSION_CATEGORIES, classify_path
-from smart_file_organizer.models import FileCategory, PlannedMove, SemanticFolderRule
+from smart_file_organizer.models import (
+    ConflictStrategy,
+    FileCategory,
+    PlannedMove,
+    SemanticFolderRule,
+)
 from smart_file_organizer.planning import (
     build_organization_plan,
     build_organization_plan_with_document_texts,
@@ -10,6 +15,7 @@ from smart_file_organizer.planning import (
     list_source_files,
     plan_file,
     plan_file_with_document_text,
+    resolve_destination_conflicts,
 )
 from smart_file_organizer.semantic_rules import (
     _SEMANTIC_FOLDER_RULES,
@@ -21,6 +27,7 @@ from smart_file_organizer.semantic_rules import (
 )
 
 __all__ = [
+    "ConflictStrategy",
     "FileCategory",
     "PlannedMove",
     "SemanticFolderRule",
@@ -36,6 +43,7 @@ __all__ = [
     "execute_plan",
     "find_destination_conflicts",
     "infer_destination_folder",
+    "resolve_destination_conflicts",
     "list_source_files",
     "plan_file",
     "plan_file_with_document_text",

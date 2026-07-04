@@ -115,6 +115,79 @@ def find_destination_conflicts(
     }
 
 
+def _sanitize_disambiguation_label(text: str) -> str:
+    """Normalize text for deterministic destination suffixes."""
+    normalized = text.lower()
+
+    for separator in ("_", "-", ".", "/", "\\", " "):
+        normalized = normalized.replace(separator, "-")
+
+    return "-".join(part for part in normalized.split("-") if part)
+
+
+def _disambiguation_label(source: Path) -> str:
+    """Return a deterministic label derived from a source path."""
+    parent_name = source.parent.name
+    if parent_name:
+        return _sanitize_disambiguation_label(parent_name)
+
+    return _sanitize_disambiguation_label(source.stem)
+
+
+def _renamed_destination(source: Path, destination: Path) -> Path:
+    """Return a renamed destination for a conflicting move."""
+    suffix = "".join(destination.suffixes)
+    if not suffix:
+        suffix = destination.suffix
+
+    label = _disambiguation_label(source)
+    return destination.parent / f"{destination.stem}__{label}{suffix}"
+
+
+def resolve_destination_conflicts(plan: Iterable[PlannedMove]) -> list[PlannedMove]:
+    """Return a plan with deterministic renamed destinations for conflicts."""
+    moves = list(plan)
+    conflicts = find_destination_conflicts(moves)
+    if not conflicts:
+        return moves
+
+    renamed_destinations: dict[tuple[Path, Path], Path] = {}
+
+    for destination, conflict_moves in conflicts.items():
+        for index, move in enumerate(
+            sorted(conflict_moves, key=lambda item: str(item.source))
+        ):
+            if index == 0:
+                renamed_destinations[(move.source, move.destination)] = destination
+                continue
+
+            renamed_destinations[(move.source, move.destination)] = (
+                _renamed_destination(
+                    move.source,
+                    destination,
+                )
+            )
+
+    resolved_plan = [
+        PlannedMove(
+            source=move.source,
+            destination=renamed_destinations.get(
+                (move.source, move.destination),
+                move.destination,
+            ),
+            category=move.category,
+        )
+        for move in moves
+    ]
+
+    if find_destination_conflicts(resolved_plan):
+        raise DestinationConflictError(
+            "rename strategy failed to resolve destination conflicts"
+        )
+
+    return resolved_plan
+
+
 def execute_plan(plan: Iterable[PlannedMove]) -> None:
     """Execute a move plan safely."""
     moves = list(plan)

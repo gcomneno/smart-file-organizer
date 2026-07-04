@@ -16,6 +16,7 @@ from smart_file_organizer.core import (
     list_source_files,
     plan_file,
     plan_file_with_document_text,
+    resolve_destination_conflicts,
 )
 from smart_file_organizer.errors import (
     DestinationConflictError,
@@ -188,6 +189,56 @@ def test_find_destination_conflicts_groups_moves_by_duplicate_destination() -> N
     assert find_destination_conflicts([first_move, second_move, safe_move]) == {
         destination: [first_move, second_move],
     }
+
+
+def test_resolve_destination_conflicts_renames_duplicate_destinations() -> None:
+    destination = Path("organized/images/photo.jpg")
+    first_move = PlannedMove(
+        source=Path("folder-a/photo.jpg"),
+        destination=destination,
+        category=FileCategory.IMAGES,
+    )
+    second_move = PlannedMove(
+        source=Path("folder-b/photo.jpg"),
+        destination=destination,
+        category=FileCategory.IMAGES,
+    )
+
+    resolved = resolve_destination_conflicts([first_move, second_move])
+
+    assert resolved == [
+        first_move,
+        PlannedMove(
+            source=Path("folder-b/photo.jpg"),
+            destination=Path("organized/images/photo__folder-b.jpg"),
+            category=FileCategory.IMAGES,
+        ),
+    ]
+    assert find_destination_conflicts(resolved) == {}
+
+
+def test_execute_plan_moves_renamed_conflict_destinations(tmp_path: Path) -> None:
+    folder_a = tmp_path / "folder-a"
+    folder_b = tmp_path / "folder-b"
+    target_root = tmp_path / "organized"
+    folder_a.mkdir()
+    folder_b.mkdir()
+
+    first_source = folder_a / "photo.jpg"
+    second_source = folder_b / "photo.jpg"
+    first_source.write_text("first")
+    second_source.write_text("second")
+
+    plan = resolve_destination_conflicts(
+        build_organization_plan([first_source, second_source], target_root)
+    )
+
+    execute_plan(plan)
+
+    assert not first_source.exists()
+    assert not second_source.exists()
+    assert (target_root / "images" / "photo.jpg").read_text() == "first"
+    assert (target_root / "images" / "photo__folder-b.jpg").read_text() == "second"
 
 
 def test_execute_plan_moves_files_and_creates_destination_directories(

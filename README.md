@@ -167,6 +167,29 @@ Before applying a plan, the program checks that:
 
 If any of these checks fail, the command stops with an error.
 
+## Destination conflicts
+
+By default, the planner stops when two source files would move to the same destination.
+
+Use `--conflict-strategy rename` to resolve simple filename collisions with deterministic renamed destinations:
+
+~~~bash
+uv run smart-file-organizer plan \
+  --conflict-strategy rename \
+  --target organized \
+  folder-a/photo.jpg \
+  folder-b/photo.jpg
+~~~
+
+Example output:
+
+~~~text
+folder-a/photo.jpg -> organized/images/photo.jpg
+folder-b/photo.jpg -> organized/images/photo__folder-b.jpg
+~~~
+
+The first source in sorted order keeps the original destination name. Additional conflicting files receive a suffix derived from their source path.
+
 ## Output format
 
 By default, `plan` prints one move per line:
@@ -257,7 +280,7 @@ Synthetic examples are preferred for tests and documentation.
 - Content inspection is opt-in and currently limited to supported document types.
 - Directory scanning is non-recursive by default; use `--recursive` to include nested files.
 - Existing destination files are never overwritten.
-- There is no rename strategy for conflicts yet.
+- Destination conflicts fail by default; use `--conflict-strategy rename` for deterministic renames.
 - Configuration currently supports semantic TOML rules only.
 
 These limitations are intentional for now. The project is being built step by step with small, tested changes.
