@@ -9,3 +9,8 @@ keywords = ["synthetic invoice", "demo utility"]
 [[semantic_rules]]
 folder = "learning/demo-course"
 keywords = ["demo course", "training notes"]
+
+# Optional regex patterns match normalized path text (lowercase, separators -> spaces).
+# [[semantic_rules]]
+# folder = "documents/demo-dated-reports"
+# patterns = ["\\d{8} demo report \\d+"]

@@ -45,6 +45,38 @@ def test_parse_config_reads_semantic_rules() -> None:
     )
 
 
+def test_parse_config_reads_regex_patterns() -> None:
+    config = parse_config(
+        {
+            "semantic_rules": [
+                {
+                    "folder": "documents/analisi-mediche",
+                    "patterns": [r"\d{8} analisi ade \d+"],
+                },
+                {
+                    "folder": "books/fiction/demo-author",
+                    "keywords": ["demo author"],
+                    "patterns": [r"^demo author \d{4} "],
+                },
+            ],
+        }
+    )
+
+    assert config == OrganizerConfig(
+        semantic_rules=(
+            SemanticRule(
+                folder="documents/analisi-mediche",
+                patterns=(r"\d{8} analisi ade \d+",),
+            ),
+            SemanticRule(
+                folder="books/fiction/demo-author",
+                keywords=("demo author",),
+                patterns=(r"^demo author \d{4} ",),
+            ),
+        )
+    )
+
+
 def test_load_config_reads_toml_file(tmp_path: Path) -> None:
     config_file = tmp_path / "smart-file-organizer.toml"
     config_file.write_text(
@@ -77,11 +109,19 @@ keywords = ["demo utility", "invoice"]
         ),
         (
             {"semantic_rules": [{"folder": "documents/demo", "keywords": []}]},
-            "semantic rule keywords must be a non-empty list",
+            "semantic rule must define keywords and/or patterns",
         ),
         (
             {"semantic_rules": [{"folder": "documents/demo", "keywords": [""]}]},
             "semantic rule keywords must be non-empty strings",
+        ),
+        (
+            {"semantic_rules": [{"folder": "documents/demo", "patterns": [""]}]},
+            "semantic rule patterns must be non-empty strings",
+        ),
+        (
+            {"semantic_rules": [{"folder": "documents/demo", "patterns": ["("]}]},
+            "semantic rule pattern is invalid",
         ),
     ],
 )
