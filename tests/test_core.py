@@ -354,11 +354,19 @@ def test_execute_plan_rejects_destination_conflicts(tmp_path: Path) -> None:
             Path("documents/utilities/water"),
         ),
         (
+            "acqua-bolletta-2026.pdf",
+            Path("documents/utilities/water"),
+        ),
+        (
             "SFL_domanda_INPS-SFL-2026-0000000_2026-05-15.pdf",
             Path("documents/inps-sfl"),
         ),
         (
             "20260331182348_ModelloAttestazioneDsu.pdf",
+            Path("documents/inps-sfl"),
+        ),
+        (
+            "naspi_report_2026.pdf",
             Path("documents/inps-sfl"),
         ),
         (
@@ -382,11 +390,19 @@ def test_execute_plan_rejects_destination_conflicts(tmp_path: Path) -> None:
             Path("documents/health"),
         ),
         (
+            "verbale-invalidita-2026.pdf",
+            Path("documents/health"),
+        ),
+        (
             "PN_LEGAL_FACTS-648db301539a44a9a34efc15c83ad6b9.pdf",
             Path("documents/legal-notifications"),
         ),
         (
             "DocumentoPostawebRapporto_00000000_00000000.pdf",
+            Path("documents/bank-poste"),
+        ),
+        (
+            "CostiMutuo-2026.pdf",
             Path("documents/bank-poste"),
         ),
         (
@@ -418,6 +434,18 @@ def test_execute_plan_rejects_destination_conflicts(tmp_path: Path) -> None:
             Path("books/programming"),
         ),
         (
+            "ESP-IDF-Programming-Guide.pdf",
+            Path("books/programming"),
+        ),
+        (
+            "OReilly-Software-Architecture.pdf",
+            Path("books/programming"),
+        ),
+        (
+            "Wiley-Modern-CPP.pdf",
+            Path("books/programming"),
+        ),
+        (
             "Hacking Secret Ciphers with Python.pdf",
             Path("books/programming"),
         ),
@@ -444,6 +472,18 @@ def test_infer_destination_folder_from_realistic_backup_names(
     expected_folder: Path,
 ) -> None:
     assert infer_destination_folder(Path(filename)) == expected_folder
+
+
+def test_infer_destination_folder_keeps_tax_file_with_generic_verbale_in_name() -> None:
+    assert infer_destination_folder(
+        Path("ADE 2024 - Verbale definitivo.pdf"),
+    ) == Path("documents/taxes")
+
+
+def test_infer_destination_folder_does_not_classify_generic_verbale_as_health() -> None:
+    assert infer_destination_folder(Path("verbale-definitivo-2026.pdf")) == Path(
+        "documents"
+    )
 
 
 def test_infer_destination_folder_keeps_book_signal_over_text() -> None:
