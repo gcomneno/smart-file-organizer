@@ -19,6 +19,7 @@ def plan_file(
     target_root: Path,
     *,
     semantic_rules: Iterable[SemanticFolderRule] | None = None,
+    fallback_folder: str | None = None,
 ) -> PlannedMove:
     """Build a move plan for a single file without touching the filesystem."""
     return plan_file_with_document_text(
@@ -26,6 +27,7 @@ def plan_file(
         target_root,
         "",
         semantic_rules=semantic_rules,
+        fallback_folder=fallback_folder,
     )
 
 
@@ -35,6 +37,7 @@ def plan_file_with_document_text(
     document_text: str,
     *,
     semantic_rules: Iterable[SemanticFolderRule] | None = None,
+    fallback_folder: str | None = None,
 ) -> PlannedMove:
     """Build a move plan using caller-provided document text."""
     category = classify_path(source)
@@ -44,6 +47,7 @@ def plan_file_with_document_text(
             source,
             document_text=document_text,
             semantic_rules=semantic_rules,
+            fallback_folder=fallback_folder,
         )
         / source.name
     )
@@ -60,10 +64,16 @@ def build_organization_plan(
     target_root: Path,
     *,
     semantic_rules: Iterable[SemanticFolderRule] | None = None,
+    fallback_folder: str | None = None,
 ) -> list[PlannedMove]:
     """Build move plans for multiple files without touching the filesystem."""
     return [
-        plan_file(source, target_root, semantic_rules=semantic_rules)
+        plan_file(
+            source,
+            target_root,
+            semantic_rules=semantic_rules,
+            fallback_folder=fallback_folder,
+        )
         for source in sources
     ]
 
@@ -74,6 +84,7 @@ def build_organization_plan_with_document_texts(
     document_texts: Mapping[Path, str],
     *,
     semantic_rules: Iterable[SemanticFolderRule] | None = None,
+    fallback_folder: str | None = None,
 ) -> list[PlannedMove]:
     """Build move plans using caller-provided document text."""
     return [
@@ -82,6 +93,7 @@ def build_organization_plan_with_document_texts(
             target_root,
             document_texts.get(source, ""),
             semantic_rules=semantic_rules,
+            fallback_folder=fallback_folder,
         )
         for source in sources
     ]

@@ -19,6 +19,7 @@ def build_organization_plan_with_extracted_text(
     *,
     extract_text: DocumentTextExtractor,
     semantic_rules: Iterable[SemanticFolderRule] | None = None,
+    fallback_folder: str | None = None,
 ) -> list[PlannedMove]:
     """Build move plans using document text returned by an injected extractor."""
     source_list = list(sources)
@@ -29,6 +30,7 @@ def build_organization_plan_with_extracted_text(
         target_root,
         document_texts,
         semantic_rules=semantic_rules,
+        fallback_folder=fallback_folder,
     )
 
 
@@ -37,6 +39,7 @@ def build_organization_plan_inspecting_content(
     target_root: Path,
     *,
     semantic_rules: Iterable[SemanticFolderRule] | None = None,
+    fallback_folder: str | None = None,
     verbose: bool = False,
 ) -> list[PlannedMove]:
     """Build move plans using the default document text extractor."""
@@ -45,4 +48,5 @@ def build_organization_plan_inspecting_content(
         target_root,
         extract_text=lambda path: extract_document_text(path, verbose=verbose),
         semantic_rules=semantic_rules,
+        fallback_folder=fallback_folder,
     )

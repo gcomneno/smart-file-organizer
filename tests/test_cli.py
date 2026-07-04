@@ -48,6 +48,7 @@ def test_main_inspect_content_uses_content_aware_plan(
         target_root: Path,
         *,
         semantic_rules=None,
+        fallback_folder=None,
         verbose=False,
     ) -> list[PlannedMove]:
         nonlocal recorded_target
@@ -484,6 +485,37 @@ keywords = ["synthetic invoice"]
     assert capsys.readouterr().out == (
         "synthetic-invoice.pdf -> "
         "organized/documents/demo-utility/synthetic-invoice.pdf\n"
+    )
+
+
+def test_main_uses_configured_fallback_folder(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config_file = tmp_path / "smart-file-organizer.toml"
+    config_file.write_text(
+        """
+fallback_folder = "documents/inbox"
+
+[[semantic_rules]]
+folder = "documents/demo-utility"
+keywords = ["synthetic invoice"]
+""",
+        encoding="utf-8",
+    )
+
+    main(
+        [
+            "--config",
+            str(config_file),
+            "--target",
+            "organized",
+            "mystery.pdf",
+        ]
+    )
+
+    assert capsys.readouterr().out == (
+        "mystery.pdf -> organized/documents/inbox/mystery.pdf\n"
     )
 
 
