@@ -4,6 +4,7 @@ import pytest
 
 from smart_file_organizer.errors import ConfigError
 from smart_file_organizer.config import (
+    DEFAULT_FALLBACK_FOLDER,
     OrganizerConfig,
     SemanticRule,
     load_config,
@@ -12,7 +13,7 @@ from smart_file_organizer.config import (
 
 
 def test_parse_config_returns_empty_config_for_empty_data() -> None:
-    assert parse_config({}) == OrganizerConfig()
+    assert parse_config({}) == OrganizerConfig(fallback_folder="documents/inbox")
 
 
 def test_parse_config_reads_semantic_rules() -> None:
@@ -120,6 +121,21 @@ def test_parse_config_reads_fallback_folder() -> None:
             ),
         ),
     )
+
+
+def test_parse_config_uses_default_fallback_folder_without_explicit_value() -> None:
+    config = parse_config(
+        {
+            "semantic_rules": [
+                {
+                    "folder": "documents/demo-utility",
+                    "keywords": ["demo utility"],
+                },
+            ],
+        }
+    )
+
+    assert config.fallback_folder == DEFAULT_FALLBACK_FOLDER
 
 
 def test_load_config_reads_fallback_folder_from_toml(tmp_path: Path) -> None:

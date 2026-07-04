@@ -7,7 +7,11 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from smart_file_organizer.app_logging import configure_logging
-from smart_file_organizer.config import OrganizerConfig, load_config
+from smart_file_organizer.config import (
+    DEFAULT_FALLBACK_FOLDER,
+    OrganizerConfig,
+    load_config,
+)
 from smart_file_organizer.content_planning import (
     build_organization_plan_inspecting_content,
 )
@@ -218,7 +222,9 @@ def main(argv: Sequence[str] | None = None) -> None:
         parser.error(str(error))
 
     semantic_rules = semantic_rules_from_config(config)
-    fallback_folder = config.fallback_folder if config is not None else None
+    fallback_folder = (
+        config.fallback_folder if config is not None else DEFAULT_FALLBACK_FOLDER
+    )
 
     if args.inspect_content:
         plan = build_organization_plan_inspecting_content(
