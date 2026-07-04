@@ -355,6 +355,37 @@ keywords = ["synthetic invoice"]
     )
 
 
+def test_main_keeps_builtin_semantic_rules_with_config(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config_file = tmp_path / "smart-file-organizer.toml"
+    config_file.write_text(
+        """
+[[semantic_rules]]
+folder = "documents/demo-utility"
+keywords = ["synthetic invoice"]
+""",
+        encoding="utf-8",
+    )
+
+    main(
+        [
+            "--config",
+            str(config_file),
+            "--target",
+            "organized",
+            "Conto-FASTWEB-M000000000-20260501.pdf",
+        ]
+    )
+
+    assert capsys.readouterr().out == (
+        "Conto-FASTWEB-M000000000-20260501.pdf -> "
+        "organized/documents/utilities/fastweb/"
+        "Conto-FASTWEB-M000000000-20260501.pdf\n"
+    )
+
+
 def test_main_reports_invalid_config(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],

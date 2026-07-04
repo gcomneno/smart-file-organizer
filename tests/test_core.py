@@ -5,6 +5,8 @@ import pytest
 from smart_file_organizer.core import (
     FileCategory,
     PlannedMove,
+    _SEMANTIC_FOLDER_RULES,
+    _normalize_semantic_rules,
     build_organization_plan,
     build_organization_plan_with_document_texts,
     classify_path,
@@ -429,6 +431,35 @@ def test_infer_destination_folder_uses_filename_when_text_is_empty() -> None:
         Path("Conto-FASTWEB-M000000000-20260501.pdf"),
         document_text="",
     ) == Path("documents/utilities/fastweb")
+
+
+def test_normalize_semantic_rules_returns_builtins_without_config() -> None:
+    assert _normalize_semantic_rules(None) == _SEMANTIC_FOLDER_RULES
+    assert infer_destination_folder(
+        Path("Conto-FASTWEB-M000000000-20260501.pdf"),
+        semantic_rules=None,
+    ) == Path("documents/utilities/fastweb")
+
+
+def test_normalize_semantic_rules_merges_user_rules_with_builtins() -> None:
+    user_rules = (
+        (
+            "documents/demo-utility",
+            ("synthetic invoice",),
+        ),
+    )
+    merged = _normalize_semantic_rules(user_rules)
+
+    assert infer_destination_folder(
+        Path("synthetic-invoice.pdf"),
+        semantic_rules=user_rules,
+    ) == Path("documents/demo-utility")
+    assert infer_destination_folder(
+        Path("Conto-FASTWEB-M000000000-20260501.pdf"),
+        semantic_rules=user_rules,
+    ) == Path("documents/utilities/fastweb")
+    assert merged[: len(_SEMANTIC_FOLDER_RULES)] == _SEMANTIC_FOLDER_RULES
+    assert merged[len(_SEMANTIC_FOLDER_RULES) :] == user_rules
 
 
 def test_infer_destination_folder_uses_configured_semantic_rules() -> None:
