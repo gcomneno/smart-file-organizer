@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
+from typing import Literal
 
 
 class FileCategory(StrEnum):
@@ -27,3 +28,4 @@ class PlannedMove:
 
 
 SemanticFolderRule = tuple[str, tuple[str, ...]]
+ConflictStrategy = Literal["fail", "rename"]

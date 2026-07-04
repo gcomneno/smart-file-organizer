@@ -18,6 +18,7 @@ from smart_file_organizer.core import (
     execute_plan,
     find_destination_conflicts,
     list_source_files,
+    resolve_destination_conflicts,
 )
 from smart_file_organizer.errors import (
     ConfigError,
@@ -103,6 +104,15 @@ def _add_plan_arguments(parser: argparse.ArgumentParser) -> None:
         choices=("text", "json"),
         default="text",
         help="Output format for plan preview. Defaults to text.",
+    )
+    parser.add_argument(
+        "--conflict-strategy",
+        choices=("fail", "rename"),
+        default="fail",
+        help=(
+            "How to handle destination conflicts. "
+            "Defaults to fail, which stops on duplicate destinations."
+        ),
     )
 
 
@@ -222,7 +232,16 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     conflicts = find_destination_conflicts(plan)
 
-    if conflicts:
+    if args.conflict_strategy == "rename":
+        if conflicts:
+            logger.info(
+                "event=destination_conflicts_resolving count=%s", len(conflicts)
+            )
+            try:
+                plan = resolve_destination_conflicts(plan)
+            except DestinationConflictError as error:
+                parser.error(str(error))
+    elif conflicts:
         logger.warning("event=destination_conflicts count=%s", len(conflicts))
         parser.error(format_destination_conflicts(conflicts))
 
