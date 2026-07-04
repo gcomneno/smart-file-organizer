@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Literal
 
 from smart_file_organizer.classification import classify_path
+from smart_file_organizer.config import DEFAULT_FALLBACK_FOLDER
 from smart_file_organizer.models import (
     FileCategory,
     SemanticFolderRule,
@@ -334,10 +335,10 @@ def _match_semantic_folder(
 def _default_category_folder(
     category: FileCategory,
     *,
-    fallback_folder: str | None = None,
+    fallback_folder: str | None = DEFAULT_FALLBACK_FOLDER,
 ) -> Path:
     """Return the default folder when no semantic rule matches."""
-    if category == FileCategory.DOCUMENTS and fallback_folder:
+    if category == FileCategory.DOCUMENTS and fallback_folder is not None:
         return Path(fallback_folder)
 
     return Path(category.value)
@@ -348,7 +349,7 @@ def infer_destination_folder(
     *,
     document_text: str = "",
     semantic_rules: Iterable[SemanticFolderRule] | None = None,
-    fallback_folder: str | None = None,
+    fallback_folder: str | None = DEFAULT_FALLBACK_FOLDER,
 ) -> Path:
     """Infer a semantic destination folder for a path."""
     rules = _normalize_semantic_rules(semantic_rules)

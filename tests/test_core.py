@@ -105,7 +105,7 @@ def test_build_organization_plan_builds_multiple_moves() -> None:
         ),
         PlannedMove(
             source=Path("notes.txt"),
-            destination=Path("organized/documents/notes.txt"),
+            destination=Path("organized/documents/inbox/notes.txt"),
             category=FileCategory.DOCUMENTS,
         ),
         PlannedMove(
@@ -161,7 +161,7 @@ def test_find_destination_conflicts_returns_empty_for_unique_destinations() -> N
         ),
         PlannedMove(
             source=Path("notes.txt"),
-            destination=Path("organized/documents/notes.txt"),
+            destination=Path("organized/documents/inbox/notes.txt"),
             category=FileCategory.DOCUMENTS,
         ),
     ]
@@ -183,7 +183,7 @@ def test_find_destination_conflicts_groups_moves_by_duplicate_destination() -> N
     )
     safe_move = PlannedMove(
         source=Path("notes.txt"),
-        destination=Path("organized/documents/notes.txt"),
+        destination=Path("organized/documents/inbox/notes.txt"),
         category=FileCategory.DOCUMENTS,
     )
 
@@ -265,7 +265,7 @@ def test_execute_plan_moves_files_and_creates_destination_directories(
     assert not photo.exists()
     assert not notes.exists()
     assert (target_root / "images" / "photo.jpg").read_text() == "fake image"
-    assert (target_root / "documents" / "notes.txt").read_text() == "hello"
+    assert (target_root / "documents" / "inbox" / "notes.txt").read_text() == "hello"
 
 
 def test_execute_plan_rejects_existing_destination(tmp_path: Path) -> None:
@@ -483,7 +483,7 @@ def test_infer_destination_folder_keeps_tax_file_with_generic_verbale_in_name() 
 
 def test_infer_destination_folder_does_not_classify_generic_verbale_as_health() -> None:
     assert infer_destination_folder(Path("verbale-definitivo-2026.pdf")) == Path(
-        "documents"
+        "documents/inbox"
     )
 
 
@@ -567,14 +567,14 @@ def test_infer_destination_folder_ignores_generic_vehicle_terms_in_content() -> 
     assert infer_destination_folder(
         Path("2612883212.pdf"),
         document_text="Ricevuta di pagamento per servizi amministrativi\n",
-    ) == Path("documents")
+    ) == Path("documents/inbox")
 
 
 def test_infer_destination_folder_ignores_short_inps_terms_in_content() -> None:
     assert infer_destination_folder(
         Path("2612883212.pdf"),
         document_text="Technical manual mentioning INPS acronyms in a footnote\n",
-    ) == Path("documents")
+    ) == Path("documents/inbox")
 
 
 def test_infer_destination_folder_uses_specific_phrases_in_content() -> None:

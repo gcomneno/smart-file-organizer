@@ -64,7 +64,7 @@ Example output:
 
 ~~~text
 photo.jpg -> organized/images/photo.jpg
-notes.txt -> organized/documents/notes.txt
+notes.txt -> organized/documents/inbox/notes.txt
 script.py -> organized/code/script.py
 ~~~
 
@@ -215,7 +215,7 @@ Example JSON output:
   },
   {
     "source": "notes.txt",
-    "destination": "organized/documents/notes.txt",
+    "destination": "organized/documents/inbox/notes.txt",
     "category": "documents"
   }
 ]
@@ -256,7 +256,7 @@ Configured rules **extend** the built-in semantic rules; they do not replace the
 
 When a keyword from either built-in or configured rules matches the file path or inspected document text, the matching folder is used as the destination subfolder.
 
-Use `fallback_folder` to send unmatched documents to a dedicated inbox instead of the generic `documents/` folder:
+Use `fallback_folder` to send unmatched documents to a dedicated inbox. It defaults to `documents/inbox`:
 
 ~~~toml
 fallback_folder = "documents/inbox"

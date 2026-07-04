@@ -101,7 +101,7 @@ def test_main_prints_organization_plan_from_explicit_sources(capsys) -> None:
 
     assert captured.out == (
         "photo.jpg -> organized/images/photo.jpg\n"
-        "notes.txt -> organized/documents/notes.txt\n"
+        "notes.txt -> organized/documents/inbox/notes.txt\n"
         "script.py -> organized/code/script.py\n"
     )
 
@@ -129,7 +129,7 @@ def test_main_prints_organization_plan_as_json(capsys) -> None:
         "  },\n"
         "  {\n"
         '    "source": "notes.txt",\n'
-        '    "destination": "organized/documents/notes.txt",\n'
+        '    "destination": "organized/documents/inbox/notes.txt",\n'
         '    "category": "documents"\n'
         "  }\n"
         "]\n"
@@ -188,7 +188,7 @@ def test_main_prints_organization_plan_from_directory(
     captured = capsys.readouterr()
 
     assert captured.out == (
-        f"{notes} -> organized/documents/notes.txt\n"
+        f"{notes} -> organized/documents/inbox/notes.txt\n"
         f"{photo} -> organized/images/photo.jpg\n"
     )
 
@@ -220,8 +220,8 @@ def test_main_recursive_scan_includes_nested_files(
     captured = capsys.readouterr()
 
     assert captured.out == (
-        f"{nested_file} -> organized/documents/ignored.txt\n"
-        f"{notes} -> organized/documents/notes.txt\n"
+        f"{nested_file} -> organized/documents/inbox/ignored.txt\n"
+        f"{notes} -> organized/documents/inbox/notes.txt\n"
         f"{photo} -> organized/images/photo.jpg\n"
     )
 
@@ -421,7 +421,7 @@ def test_main_applies_organization_plan(
     assert not photo.exists()
     assert not notes.exists()
     assert (target_root / "images" / "photo.jpg").read_text() == "fake image"
-    assert (target_root / "documents" / "notes.txt").read_text() == "hello"
+    assert (target_root / "documents" / "inbox" / "notes.txt").read_text() == "hello"
 
 
 def test_main_apply_reports_execution_errors(

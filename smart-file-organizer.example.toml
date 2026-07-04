@@ -2,8 +2,8 @@
 #
 # Keep real/private rules outside Git. Use this file only as a public template.
 
-# Optional inbox for documents that do not match any semantic rule.
-# fallback_folder = "documents/inbox"
+# Inbox for documents that do not match any semantic rule.
+fallback_folder = "documents/inbox"
 
 [[semantic_rules]]
 folder = "documents/demo-utility"

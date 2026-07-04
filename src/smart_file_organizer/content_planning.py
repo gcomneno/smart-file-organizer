@@ -3,6 +3,7 @@
 from collections.abc import Callable, Iterable
 from pathlib import Path
 
+from smart_file_organizer.config import DEFAULT_FALLBACK_FOLDER
 from smart_file_organizer.document_text import extract_document_text
 from smart_file_organizer.core import (
     PlannedMove,
@@ -19,7 +20,7 @@ def build_organization_plan_with_extracted_text(
     *,
     extract_text: DocumentTextExtractor,
     semantic_rules: Iterable[SemanticFolderRule] | None = None,
-    fallback_folder: str | None = None,
+    fallback_folder: str | None = DEFAULT_FALLBACK_FOLDER,
 ) -> list[PlannedMove]:
     """Build move plans using document text returned by an injected extractor."""
     source_list = list(sources)
@@ -39,7 +40,7 @@ def build_organization_plan_inspecting_content(
     target_root: Path,
     *,
     semantic_rules: Iterable[SemanticFolderRule] | None = None,
-    fallback_folder: str | None = None,
+    fallback_folder: str | None = DEFAULT_FALLBACK_FOLDER,
     verbose: bool = False,
 ) -> list[PlannedMove]:
     """Build move plans using the default document text extractor."""
