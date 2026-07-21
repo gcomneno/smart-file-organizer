@@ -7,6 +7,12 @@ A small Python CLI project used as a clean-coding laboratory.
 
 The project organizes files by building a safe plan first. By default it only prints what it would do. Files are moved only when `--apply` is explicitly passed.
 
+## Project status
+
+The current product-readiness verdict, evidence, safety gaps, and proposed
+roadmap are documented in the
+[product readiness assessment](docs/product-readiness-assessment.md).
+
 ## Current features
 
 - Classifies files by extension and semantic filename/path rules.
