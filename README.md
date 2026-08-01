@@ -174,6 +174,12 @@ Third-party PDF parser warnings are suppressed by default. Use `--verbose` to sh
 
 Content-based semantic matching is stricter than filename matching: generic single-word keywords are ignored, and remaining single-word matches require whole-word hits in the extracted text.
 
+Whole-line absolute filesystem filename references, and routing lines that
+contain an absolute path start, are excluded from semantic content matching to
+avoid incidental report or log matches. Remaining descriptive lines continue
+through deterministic matching; filename and parent-path classification are
+unaffected.
+
 ### Apply the organization plan
 
 ~~~bash
