@@ -10,25 +10,61 @@ jobs:
   quality:
     name: Quality checks
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
-
       - name: Install uv
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
           enable-cache: true
           python-version: "3.12"
-
       - name: Check formatting
         run: uv run --frozen ruff format --check .
-
       - name: Lint
         run: uv run --frozen ruff check .
-
       - name: Type check
         run: uv run --frozen ty check
 
-      - name: Test
-        run: uv run --frozen python -m pytest
+  tests:
+    name: Tests — Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version:
+          - "3.11"
+          - "3.12"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python-version }}
+      - name: Run complete test suite
+        run: uv run --frozen --python "${{ matrix.python-version }}" python -m pytest
+
+  package:
+    name: Build and installed-package smoke tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - name: Build reproducible release artifacts
+        run: scripts/build-release-artifacts.sh dist
+      - name: Smoke test installed wheel on Python 3.11
+        env:
+          UV_PYTHON: "3.11"
+        run: scripts/smoke-installed-package.sh dist/*.whl
+      - name: Smoke test installed wheel on Python 3.12
+        env:
+          UV_PYTHON: "3.12"
+        run: scripts/smoke-installed-package.sh dist/*.whl
