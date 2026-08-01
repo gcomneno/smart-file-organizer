@@ -256,6 +256,13 @@ planning and again immediately before applying a plan.
 
 If any of these checks fail, the command stops with an error.
 
+Destination conflicts fail by default. With `--conflict-strategy rename`, the
+first source in deterministic path order keeps the original filename. Later
+sources use a sanitized immediate-parent suffix such as `__folder-b`; repeated
+suffixes receive stable numeric extensions such as `__device-2`. The resolver
+also reserves every destination already present in the plan, so generated names
+cannot silently replace another planned destination.
+
 ## Content-inspection limits and failure policy
 
 Content inspection remains opt-in through `--inspect-content`.

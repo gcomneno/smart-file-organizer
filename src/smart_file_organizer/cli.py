@@ -364,7 +364,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             except DestinationConflictError as error:
                 parser.error(str(error))
     elif conflicts:
-        logger.warning("event=destination_conflicts count=%s", len(conflicts))
+        logger.info("event=destination_conflicts count=%s", len(conflicts))
         parser.error(format_destination_conflicts(conflicts))
 
     try:

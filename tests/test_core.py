@@ -220,6 +220,105 @@ def test_resolve_destination_conflicts_renames_duplicate_destinations() -> None:
     assert find_destination_conflicts(resolved) == {}
 
 
+def test_resolve_destination_conflicts_handles_repeated_parent_labels() -> None:
+    destination = Path("organized/other/tool")
+    moves = [
+        PlannedMove(
+            source=Path(f"snapshot-{name}/device/tool"),
+            destination=destination,
+            category=FileCategory.OTHER,
+        )
+        for name in ("c", "a", "b")
+    ]
+
+    resolved = resolve_destination_conflicts(moves)
+    destinations_by_source = {move.source: move.destination for move in resolved}
+
+    assert destinations_by_source == {
+        Path("snapshot-a/device/tool"): Path("organized/other/tool"),
+        Path("snapshot-b/device/tool"): Path("organized/other/tool__device"),
+        Path("snapshot-c/device/tool"): Path("organized/other/tool__device-2"),
+    }
+    assert find_destination_conflicts(resolved) == {}
+
+
+def test_resolve_destination_conflicts_is_input_order_independent() -> None:
+    destination = Path("organized/other/tool")
+    sources = [
+        Path("snapshot-a/device/tool"),
+        Path("snapshot-b/device/tool"),
+        Path("snapshot-c/device/tool"),
+    ]
+
+    def resolve_for_order(ordered_sources: list[Path]) -> dict[Path, Path]:
+        resolved = resolve_destination_conflicts(
+            [
+                PlannedMove(
+                    source=source,
+                    destination=destination,
+                    category=FileCategory.OTHER,
+                )
+                for source in ordered_sources
+            ]
+        )
+        return {move.source: move.destination for move in resolved}
+
+    assert resolve_for_order(sources) == resolve_for_order(list(reversed(sources)))
+
+
+def test_resolve_destination_conflicts_reserves_existing_plan_destinations() -> None:
+    destination = Path("organized/other/tool")
+    already_reserved = PlannedMove(
+        source=Path("existing/tool__device"),
+        destination=Path("organized/other/tool__device"),
+        category=FileCategory.OTHER,
+    )
+    first = PlannedMove(
+        source=Path("snapshot-a/device/tool"),
+        destination=destination,
+        category=FileCategory.OTHER,
+    )
+    second = PlannedMove(
+        source=Path("snapshot-b/device/tool"),
+        destination=destination,
+        category=FileCategory.OTHER,
+    )
+
+    resolved = resolve_destination_conflicts([second, already_reserved, first])
+    destinations_by_source = {move.source: move.destination for move in resolved}
+
+    assert destinations_by_source[Path("snapshot-a/device/tool")] == (
+        Path("organized/other/tool")
+    )
+    assert destinations_by_source[Path("snapshot-b/device/tool")] == (
+        Path("organized/other/tool__device-2")
+    )
+    assert destinations_by_source[Path("existing/tool__device")] == (
+        Path("organized/other/tool__device")
+    )
+    assert find_destination_conflicts(resolved) == {}
+
+
+def test_resolve_destination_conflicts_preserves_compound_suffixes() -> None:
+    destination = Path("organized/archives/archive.tar.gz")
+    first = PlannedMove(
+        source=Path("folder-a/archive.tar.gz"),
+        destination=destination,
+        category=FileCategory.OTHER,
+    )
+    second = PlannedMove(
+        source=Path("folder-b/archive.tar.gz"),
+        destination=destination,
+        category=FileCategory.OTHER,
+    )
+
+    resolved = resolve_destination_conflicts([first, second])
+
+    assert resolved[1].destination == Path(
+        "organized/archives/archive__folder-b.tar.gz"
+    )
+
+
 def test_execute_plan_moves_renamed_conflict_destinations(tmp_path: Path) -> None:
     folder_a = tmp_path / "folder-a"
     folder_b = tmp_path / "folder-b"

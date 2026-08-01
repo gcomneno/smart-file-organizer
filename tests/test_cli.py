@@ -350,10 +350,38 @@ def test_main_rejects_destination_conflicts(
     captured = capsys.readouterr()
 
     assert exc_info.value.code == 2
+    assert captured.out == ""
     assert "destination conflicts detected:" in captured.err
     assert "organized/images/photo.jpg" in captured.err
     assert "folder-a/photo.jpg" in captured.err
     assert "folder-b/photo.jpg" in captured.err
+    assert "WARNING smart_file_organizer.cli" not in captured.err
+    assert "Traceback" not in captured.err
+    assert "usage:" not in captured.err
+
+
+def test_main_verbose_logs_destination_conflict_event(
+    capsys,
+    explicit_source_files: None,
+) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        main(
+            [
+                "--verbose",
+                "folder-a/photo.jpg",
+                "folder-b/photo.jpg",
+            ]
+        )
+
+    captured = capsys.readouterr()
+
+    assert exc_info.value.code == 2
+    assert captured.out == ""
+    assert (
+        "INFO smart_file_organizer.cli event=destination_conflicts count=1"
+    ) in captured.err
+    assert "destination conflicts detected:" in captured.err
+    assert "Traceback" not in captured.err
 
 
 def test_main_resolves_destination_conflicts_with_rename_strategy(
@@ -389,6 +417,46 @@ def test_main_resolves_destination_conflicts_with_rename_strategy(
         f"{photo_a} -> {target_root}/images/photo.jpg\n"
         f"{photo_b} -> {target_root}/images/photo__folder-b.jpg\n"
     )
+
+
+def test_main_resolves_repeated_parent_labels_with_rename_strategy(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    source_root = tmp_path / "source"
+    target_root = tmp_path / "organized"
+
+    tools = []
+
+    for snapshot in ("snapshot-a", "snapshot-b", "snapshot-c"):
+        device = source_root / snapshot / "device"
+        device.mkdir(parents=True)
+        tool = device / "tool"
+        tool.write_text(snapshot)
+        tools.append(tool)
+
+    main(
+        [
+            "plan",
+            "--recursive",
+            "--conflict-strategy",
+            "rename",
+            "--from",
+            str(source_root),
+            "--target",
+            str(target_root),
+        ]
+    )
+
+    captured = capsys.readouterr()
+
+    assert captured.err == ""
+    assert captured.out == (
+        f"{tools[0]} -> {target_root}/other/tool\n"
+        f"{tools[1]} -> {target_root}/other/tool__device\n"
+        f"{tools[2]} -> {target_root}/other/tool__device-2\n"
+    )
+    assert not target_root.exists()
 
 
 def test_main_applies_organization_plan_with_rename_strategy(
