@@ -183,51 +183,82 @@ def _disambiguation_label(source: Path) -> str:
     return _sanitize_disambiguation_label(source.stem)
 
 
-def _renamed_destination(source: Path, destination: Path) -> Path:
-    """Return a renamed destination for a conflicting move."""
+def _renamed_destination(
+    source: Path,
+    destination: Path,
+    *,
+    ordinal: int | None = None,
+) -> Path:
+    """Return one deterministic renamed destination for a conflicting move."""
     suffix = "".join(destination.suffixes)
-    if not suffix:
-        suffix = destination.suffix
-
+    stem = destination.name[: -len(suffix)] if suffix else destination.name
     label = _disambiguation_label(source)
-    return destination.parent / f"{destination.stem}__{label}{suffix}"
+
+    if ordinal is not None:
+        label = f"{label}-{ordinal}"
+
+    return destination.parent / f"{stem}__{label}{suffix}"
+
+
+def _next_available_renamed_destination(
+    source: Path,
+    destination: Path,
+    reserved_destinations: set[Path],
+) -> Path:
+    """Return the first deterministic renamed destination not already reserved."""
+    ordinal: int | None = None
+
+    while True:
+        candidate = _renamed_destination(
+            source,
+            destination,
+            ordinal=ordinal,
+        )
+
+        if candidate not in reserved_destinations:
+            return candidate
+
+        ordinal = 2 if ordinal is None else ordinal + 1
 
 
 def resolve_destination_conflicts(plan: Iterable[PlannedMove]) -> list[PlannedMove]:
-    """Return a plan with deterministic renamed destinations for conflicts."""
+    """Return a plan with deterministic unique destinations for conflicts."""
     moves = list(plan)
     conflicts = find_destination_conflicts(moves)
+
     if not conflicts:
         return moves
 
-    renamed_destinations: dict[tuple[Path, Path], Path] = {}
+    resolved_destinations = [move.destination for move in moves]
+    reserved_destinations = set(resolved_destinations)
+    indices_by_destination: dict[Path, list[int]] = {}
 
-    for destination, conflict_moves in conflicts.items():
-        for index, move in enumerate(
-            sorted(conflict_moves, key=lambda item: str(item.source))
-        ):
-            if index == 0:
-                renamed_destinations[(move.source, move.destination)] = destination
-                continue
+    for index, move in enumerate(moves):
+        indices_by_destination.setdefault(move.destination, []).append(index)
 
-            renamed_destinations[(move.source, move.destination)] = (
-                _renamed_destination(
-                    move.source,
-                    destination,
-                )
+    for destination in sorted(conflicts, key=str):
+        conflict_indices = sorted(
+            indices_by_destination[destination],
+            key=lambda index: str(moves[index].source),
+        )
+
+        for index in conflict_indices[1:]:
+            candidate = _next_available_renamed_destination(
+                moves[index].source,
+                destination,
+                reserved_destinations,
             )
+            resolved_destinations[index] = candidate
+            reserved_destinations.add(candidate)
 
     resolved_plan = [
         PlannedMove(
             source=move.source,
-            destination=renamed_destinations.get(
-                (move.source, move.destination),
-                move.destination,
-            ),
+            destination=resolved_destinations[index],
             category=move.category,
             classification=move.classification,
         )
-        for move in moves
+        for index, move in enumerate(moves)
     ]
 
     if find_destination_conflicts(resolved_plan):

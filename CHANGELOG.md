@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- resolve rename-strategy conflicts when different sources share the same
+  immediate parent-directory name;
+- reserve existing and generated plan destinations while assigning deterministic
+  numeric rename suffixes;
+- keep expected destination-conflict diagnostics free of default logging
+  prefixes while retaining structured events in verbose mode.
+
 ## [0.4.1] - 2026-08-01
 
 ### Changed
