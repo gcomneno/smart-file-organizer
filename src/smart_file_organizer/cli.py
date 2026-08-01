@@ -111,8 +111,9 @@ def _add_plan_arguments(parser: argparse.ArgumentParser) -> None:
         "--inspect-content",
         action="store_true",
         help=(
-            "Inspect supported document content when building the plan. "
-            "Disabled by default."
+            "Inspect .txt content and the first three PDF pages. "
+            "Reader failures and PDFs without text fall back to filename "
+            "classification. OCR is not performed."
         ),
     )
     parser.add_argument(

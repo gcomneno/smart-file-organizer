@@ -182,6 +182,33 @@ planning and again immediately before applying a plan.
 
 If any of these checks fail, the command stops with an error.
 
+## Content-inspection limits and failure policy
+
+Content inspection remains opt-in through `--inspect-content`.
+
+The supported inspection formats are:
+
+- UTF-8 text files, read with replacement for invalid byte sequences;
+- PDF files, limited to the first three pages.
+
+Other file formats are not opened for content inspection and continue through
+filename-based classification.
+
+PDF inspection does not perform OCR. A PDF containing only scanned images, or
+pages from which the parser returns no text, therefore produces a concise
+warning and falls back to filename classification.
+
+Corrupt, encrypted, unreadable, and otherwise parser-rejected PDFs follow the
+same **warn-and-fallback** policy:
+
+- the CLI identifies the affected path;
+- the default output suppresses parser warnings and raw tracebacks;
+- filename classification continues with empty extracted text;
+- `--verbose` adds the parser error class but never logs extracted contents.
+
+The fallback does not silently claim that inspection succeeded. It preserves
+the ordinary filename rules while making the degraded outcome visible.
+
 ## Symlink and hidden-file policy
 
 Source handling follows one deterministic policy during collection, preview,
