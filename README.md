@@ -182,6 +182,53 @@ planning and again immediately before applying a plan.
 
 If any of these checks fail, the command stops with an error.
 
+## Apply results and recovery manifests
+
+Every `--apply` execution creates a JSON manifest beneath the target root:
+
+~~~text
+<target>/.smart-file-organizer/manifests/apply-<timestamp>-<id>.json
+~~~
+
+A successful apply prints a concise result:
+
+~~~text
+Apply result: completed=2 failed=0 unattempted=0
+Manifest: /absolute/path/to/organized/.smart-file-organizer/manifests/apply-....json
+~~~
+
+The manifest is created before the first move and atomically updated before and
+after every attempted filesystem operation. Each record contains the original
+path, final path, category, status, timestamp, and any captured error.
+
+The durable statuses mean:
+
+- `completed`: the move returned successfully and the final path was observed;
+- `failed`: the attempted move raised an expected filesystem error;
+- `unattempted`: execution stopped before this move was attempted;
+- `in_progress`: execution or manifest persistence was interrupted while the
+  move required investigation.
+
+Execution stops at the first move failure. The CLI reports completed, failed,
+and unattempted counts, prints the manifest path, and exits unsuccessfully
+without a Python traceback.
+
+The manifest is recovery evidence, not an automatic rollback mechanism. For
+manual recovery:
+
+1. inspect both `original_path` and `final_path` for every non-unattempted entry;
+2. treat `completed` entries as files expected at `final_path`;
+3. treat `failed` and `in_progress` entries as requiring inspection of both
+   locations;
+4. move completed files back only after confirming that restoring
+   `original_path` will not overwrite another file.
+
+Filesystem-wide atomicity is not guaranteed. In particular, `shutil.move` may
+perform a copy followed by source removal across filesystems. A process crash,
+full disk, permission change, or external filesystem mutation can therefore
+leave partial or duplicated state. The manifest records the strongest evidence
+available; it does not claim a transaction or automatic undo.
+
 ## Destination conflicts
 
 By default, the planner stops when two source files would move to the same destination.
