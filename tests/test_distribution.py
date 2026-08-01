@@ -21,7 +21,7 @@ def load_project_metadata() -> dict[str, object]:
 
 def test_package_version_matches_project_metadata() -> None:
     project = load_project_metadata()
-    assert project["version"] == "0.4.1"
+    assert project["version"] == "0.4.2"
     assert __version__ == project["version"]
 
 
@@ -33,7 +33,7 @@ def test_cli_reports_installed_version(
     captured = capsys.readouterr()
     assert exc_info.value.code == 0
     assert captured.err == ""
-    assert captured.out == "smart-file-organizer 0.4.1\n"
+    assert captured.out == "smart-file-organizer 0.4.2\n"
 
 
 def test_project_metadata_declares_provenance() -> None:

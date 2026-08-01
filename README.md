@@ -41,10 +41,10 @@ Requirements:
 - Python 3.11 or Python 3.12;
 - `uv` for isolated command installation.
 
-Install version `0.4.1` directly from its release wheel:
+Install version `0.4.2` directly from its release wheel:
 
 ~~~bash
-uv tool install "https://github.com/gcomneno/smart-file-organizer/releases/download/v0.4.1/smart_file_organizer-0.4.1-py3-none-any.whl"
+uv tool install "https://github.com/gcomneno/smart-file-organizer/releases/download/v0.4.2/smart_file_organizer-0.4.2-py3-none-any.whl"
 ~~~
 
 Verify the installed version and provenance:
@@ -57,7 +57,7 @@ uv tool list
 Expected output:
 
 ~~~text
-smart-file-organizer 0.4.1
+smart-file-organizer 0.4.2
 ~~~
 
 Start with a dry run. Create a sample text file, then run:
