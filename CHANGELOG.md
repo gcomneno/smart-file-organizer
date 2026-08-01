@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-08-01
+
 ### Changed
 
 - use `smart-file-organizer plan ...` as the canonical onboarding syntax;
@@ -35,4 +37,6 @@ All notable changes to this project are documented in this file.
 - Ruff now targets the minimum supported Python version, Python 3.11;
 - CI separates quality, compatibility, and installed-package checks.
 
+[Unreleased]: https://github.com/gcomneno/smart-file-organizer/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/gcomneno/smart-file-organizer/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/gcomneno/smart-file-organizer/releases/tag/v0.4.0
