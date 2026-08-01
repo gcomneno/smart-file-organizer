@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-08-01
+
 ### Fixed
 
 - resolve rename-strategy conflicts when different sources share the same
@@ -46,6 +48,7 @@ All notable changes to this project are documented in this file.
 - Ruff now targets the minimum supported Python version, Python 3.11;
 - CI separates quality, compatibility, and installed-package checks.
 
-[Unreleased]: https://github.com/gcomneno/smart-file-organizer/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/gcomneno/smart-file-organizer/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/gcomneno/smart-file-organizer/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/gcomneno/smart-file-organizer/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/gcomneno/smart-file-organizer/releases/tag/v0.4.0
