@@ -383,17 +383,17 @@ def main(argv: Sequence[str] | None = None) -> None:
             InvalidSourceError,
             UnsafePathError,
         ) as error:
-            logger.error("event=plan_apply_failed error_type=%s", type(error).__name__)
+            logger.info("event=plan_apply_failed error_type=%s", type(error).__name__)
             parser.error(str(error))
         except ManifestWriteError as error:
-            logger.error("event=manifest_write_failed")
+            logger.info("event=manifest_write_failed")
             parser.exit(1, f"{parser.prog}: error: {error}\n")
 
         summary = format_execution_summary(result)
 
         if result.failed_count:
             sys.stderr.write(summary)
-            logger.error(
+            logger.info(
                 "event=plan_apply_partial completed=%s failed=%s unattempted=%s",
                 result.completed_count,
                 result.failed_count,
