@@ -8,6 +8,7 @@ from smart_file_organizer.errors import DestinationConflictError
 from smart_file_organizer.config import DEFAULT_FALLBACK_FOLDER
 from smart_file_organizer.models import PlannedMove, SemanticFolderRule
 from smart_file_organizer.path_validation import (
+    is_supported_source_file,
     validate_destination,
     validate_destination_folder,
 )
@@ -100,11 +101,25 @@ def build_organization_plan_with_document_texts(
 
 
 def list_source_files(source_root: Path, *, recursive: bool = False) -> list[Path]:
-    """Return files contained in a source directory."""
-    if recursive:
-        return sorted(path for path in source_root.rglob("*") if path.is_file())
+    """Return supported files without following directory symlinks."""
+    files: list[Path] = []
 
-    return sorted(path for path in source_root.iterdir() if path.is_file())
+    def visit(directory: Path) -> None:
+        for path in sorted(directory.iterdir(), key=str):
+            if path.is_symlink():
+                if is_supported_source_file(path):
+                    files.append(path)
+                continue
+
+            if is_supported_source_file(path):
+                files.append(path)
+                continue
+
+            if recursive and path.is_dir():
+                visit(path)
+
+    visit(source_root)
+    return sorted(files, key=str)
 
 
 def find_destination_conflicts(
