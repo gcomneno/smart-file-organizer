@@ -9,9 +9,13 @@ The project organizes files by building a safe plan first. By default it only pr
 
 ## Project status
 
-The current product-readiness verdict, evidence, safety gaps, and proposed
-roadmap are documented in the
-[product readiness assessment](docs/product-readiness-assessment.md).
+The current released baseline is v0.4.2. Its operational behavior and
+limitations are documented in this README. The approved forward architectural
+direction is [ADR 0001](docs/adr/0001-evolution-architecture.md), and roadmap
+implementation is tracked in [issue #67](https://github.com/gcomneno/smart-file-organizer/issues/67).
+The [product readiness assessment](docs/product-readiness-assessment.md) is
+retained as the historical v0.3.3 assessment; its verdict does not describe
+the current v0.4.2 baseline.
 
 ## Current features
 
