@@ -35,3 +35,11 @@ class DestinationParentError(OSError):
 
 class ManifestWriteError(OSError):
     """Raised when durable apply evidence cannot be persisted."""
+
+
+class BrokenSourceSymlinkError(InvalidSourceError):
+    """Raised when an explicit source symlink has no existing referent."""
+
+
+class UnsupportedSourceSymlinkError(InvalidSourceError):
+    """Raised when a source symlink does not point to a regular file."""
