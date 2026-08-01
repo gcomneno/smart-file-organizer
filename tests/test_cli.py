@@ -13,6 +13,29 @@ from smart_file_organizer.core import FileCategory, PlannedMove
 from smart_file_organizer.errors import SourceSelectionError
 
 
+@pytest.fixture
+def explicit_source_files(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Provide real files for CLI examples that use relative sources."""
+    monkeypatch.chdir(tmp_path)
+    for relative_path in (
+        "generic.pdf",
+        "photo.jpg",
+        "notes.txt",
+        "script.py",
+        "synthetic-invoice.pdf",
+        "mystery.pdf",
+        "Conto-FASTWEB-M000000000-20260501.pdf",
+        "folder-a/photo.jpg",
+        "folder-b/photo.jpg",
+    ):
+        path = Path(relative_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("synthetic fixture")
+
+
 def test_format_destination_conflicts() -> None:
     destination = Path("organized/images/photo.jpg")
     conflicts = {
@@ -39,6 +62,7 @@ def test_format_destination_conflicts() -> None:
 def test_main_inspect_content_uses_content_aware_plan(
     monkeypatch: pytest.MonkeyPatch,
     capsys,
+    explicit_source_files: None,
 ) -> None:
     recorded_sources: list[Path] = []
     recorded_target: Path | None = None
@@ -86,7 +110,9 @@ def test_main_inspect_content_uses_content_aware_plan(
     assert captured.out == ("generic.pdf -> organized/documents/taxes/generic.pdf\n")
 
 
-def test_main_prints_organization_plan_from_explicit_sources(capsys) -> None:
+def test_main_prints_organization_plan_from_explicit_sources(
+    capsys, explicit_source_files: None
+) -> None:
     main(
         [
             "--target",
@@ -106,7 +132,9 @@ def test_main_prints_organization_plan_from_explicit_sources(capsys) -> None:
     )
 
 
-def test_main_prints_organization_plan_as_json(capsys) -> None:
+def test_main_prints_organization_plan_as_json(
+    capsys, explicit_source_files: None
+) -> None:
     main(
         [
             "--format",
@@ -136,7 +164,9 @@ def test_main_prints_organization_plan_as_json(capsys) -> None:
     )
 
 
-def test_main_plan_command_prints_organization_plan(capsys) -> None:
+def test_main_plan_command_prints_organization_plan(
+    capsys, explicit_source_files: None
+) -> None:
     main(
         [
             "plan",
@@ -309,7 +339,9 @@ def test_main_rejects_source_path_that_is_not_directory(
     assert f"source path is not a directory: {source_file}" in captured.err
 
 
-def test_main_rejects_destination_conflicts(capsys) -> None:
+def test_main_rejects_destination_conflicts(
+    capsys, explicit_source_files: None
+) -> None:
     with pytest.raises(SystemExit) as exc_info:
         main(["folder-a/photo.jpg", "folder-b/photo.jpg"])
 
@@ -461,6 +493,7 @@ def test_main_apply_reports_execution_errors(
 def test_main_uses_configured_semantic_rules(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
+    explicit_source_files: None,
 ) -> None:
     config_file = tmp_path / "smart-file-organizer.toml"
     config_file.write_text(
@@ -491,6 +524,7 @@ keywords = ["synthetic invoice"]
 def test_main_uses_configured_fallback_folder(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
+    explicit_source_files: None,
 ) -> None:
     config_file = tmp_path / "smart-file-organizer.toml"
     config_file.write_text(
@@ -522,6 +556,7 @@ keywords = ["synthetic invoice"]
 def test_main_keeps_builtin_semantic_rules_with_config(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
+    explicit_source_files: None,
 ) -> None:
     config_file = tmp_path / "smart-file-organizer.toml"
     config_file.write_text(
@@ -584,6 +619,7 @@ patterns = ['\\d{8} analisi ade \\d+']
 def test_main_reports_invalid_config(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
+    explicit_source_files: None,
 ) -> None:
     config_file = tmp_path / "smart-file-organizer.toml"
     config_file.write_text(
@@ -620,7 +656,9 @@ def test_collect_sources_raises_source_selection_error_for_recursive_without_fro
         collect_sources(None, [Path("notes.txt")], recursive=True)
 
 
-def test_main_is_quiet_by_default(capsys: pytest.CaptureFixture[str]) -> None:
+def test_main_is_quiet_by_default(
+    capsys: pytest.CaptureFixture[str], explicit_source_files: None
+) -> None:
     main(["photo.jpg"])
 
     captured = capsys.readouterr()
@@ -630,6 +668,7 @@ def test_main_is_quiet_by_default(capsys: pytest.CaptureFixture[str]) -> None:
 
 def test_main_verbose_logs_high_level_events(
     capsys: pytest.CaptureFixture[str],
+    explicit_source_files: None,
 ) -> None:
     main(["--verbose", "photo.jpg"])
 
@@ -639,3 +678,118 @@ def test_main_verbose_logs_high_level_events(
     assert "event=sources_collected count=1" in captured.err
     assert "event=plan_built count=1 inspect_content=False" in captured.err
     assert "photo.jpg" not in captured.err
+
+
+@pytest.mark.parametrize(
+    ("source_kind", "message"),
+    [
+        ("missing", "source file does not exist"),
+        ("directory", "source path is not a file"),
+    ],
+)
+def test_main_rejects_invalid_explicit_source_without_preview_or_traceback(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    source_kind: str,
+    message: str,
+) -> None:
+    source = tmp_path / source_kind
+    if source_kind == "directory":
+        source.mkdir()
+
+    with pytest.raises(SystemExit) as exc_info:
+        main([str(source)])
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 2
+    assert captured.out == ""
+    assert message in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_main_rejects_target_equal_to_scanned_source(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "notes.txt").write_text("notes")
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(["--from", str(tmp_path), "--target", str(tmp_path)])
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 2
+    assert captured.out == ""
+    assert "target directory must differ from source directory" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_main_rejects_recursive_target_inside_scanned_source(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    (source_root / "notes.txt").write_text("notes")
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(
+            [
+                "--from",
+                str(source_root),
+                "--recursive",
+                "--target",
+                str(source_root / "organized"),
+            ]
+        )
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 2
+    assert captured.out == ""
+    assert "must not be inside a recursively scanned source" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_main_reports_unsafe_config_folder_without_traceback(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    source = tmp_path / "notes.txt"
+    source.write_text("notes")
+    config_file = tmp_path / "unsafe.toml"
+    config_file.write_text('fallback_folder = "/escaped"\n')
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(["--config", str(config_file), str(source)])
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 2
+    assert captured.out == ""
+    assert "destination folder must be relative" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_main_allows_non_recursive_target_inside_scanned_source(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+
+    source = source_root / "notes.txt"
+    source.write_text("notes")
+
+    target_root = source_root / "organized"
+
+    main(
+        [
+            "--from",
+            str(source_root),
+            "--target",
+            str(target_root),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert captured.out == (f"{source} -> {target_root}/documents/inbox/notes.txt\n")
+    assert captured.err == ""
+    assert not target_root.exists()

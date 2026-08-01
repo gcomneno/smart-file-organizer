@@ -13,8 +13,16 @@ class DestinationConflictError(ValueError):
     """Raised when a plan contains destination conflicts."""
 
 
-class SourceMissingError(FileNotFoundError):
+class InvalidSourceError(ValueError):
+    """Raised when a source is not an allowed file."""
+
+
+class SourceMissingError(InvalidSourceError, FileNotFoundError):
     """Raised when a planned source file is missing."""
+
+
+class UnsafePathError(ValueError):
+    """Raised when a source/target or destination path violates safety rules."""
 
 
 class DestinationExistsError(FileExistsError):
