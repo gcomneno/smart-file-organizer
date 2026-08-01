@@ -6,6 +6,7 @@ import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+from smart_file_organizer import __version__
 from smart_file_organizer.app_logging import configure_logging
 from smart_file_organizer.config import (
     DEFAULT_FALLBACK_FOLDER,
@@ -53,6 +54,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="smart-file-organizer",
         description="Organize files through safe command groups.",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
     )
     subparsers = parser.add_subparsers(dest="command", metavar="command")
 
@@ -153,7 +159,11 @@ def _normalize_argv(argv: Sequence[str] | None) -> list[str]:
     """Return argv with the default command inserted for legacy invocations."""
     args = list(sys.argv[1:] if argv is None else argv)
 
-    if args and args[0] in {"-h", "--help"}:
+    if args and args[0] in {
+        "-h",
+        "--help",
+        "--version",
+    }:
         return args
 
     if args and args[0] == "plan":
