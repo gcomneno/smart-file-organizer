@@ -4,15 +4,19 @@ from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 from smart_file_organizer.classification import classify_path
-from smart_file_organizer.errors import DestinationConflictError
 from smart_file_organizer.config import DEFAULT_FALLBACK_FOLDER
-from smart_file_organizer.models import PlannedMove, SemanticFolderRule
+from smart_file_organizer.errors import DestinationConflictError
+from smart_file_organizer.models import (
+    PlannedMove,
+    RulePrecedence,
+    SemanticFolderRule,
+)
 from smart_file_organizer.path_validation import (
     is_supported_source_file,
     validate_destination,
     validate_destination_folder,
 )
-from smart_file_organizer.semantic_rules import infer_destination_folder
+from smart_file_organizer.semantic_rules import infer_destination
 
 
 def plan_file(
@@ -21,14 +25,18 @@ def plan_file(
     *,
     semantic_rules: Iterable[SemanticFolderRule] | None = None,
     fallback_folder: str | None = DEFAULT_FALLBACK_FOLDER,
+    rule_precedence: RulePrecedence = "builtins-first",
+    disabled_builtin_rules: Iterable[str] = (),
 ) -> PlannedMove:
-    """Build a move plan for a single file without touching the filesystem."""
+    """Build a move plan for one file without filesystem mutation."""
     return plan_file_with_document_text(
         source,
         target_root,
         "",
         semantic_rules=semantic_rules,
         fallback_folder=fallback_folder,
+        rule_precedence=rule_precedence,
+        disabled_builtin_rules=disabled_builtin_rules,
     )
 
 
@@ -39,17 +47,20 @@ def plan_file_with_document_text(
     *,
     semantic_rules: Iterable[SemanticFolderRule] | None = None,
     fallback_folder: str | None = DEFAULT_FALLBACK_FOLDER,
+    rule_precedence: RulePrecedence = "builtins-first",
+    disabled_builtin_rules: Iterable[str] = (),
 ) -> PlannedMove:
-    """Build a move plan using caller-provided document text."""
+    """Build a move plan and retain the classification decision."""
     category = classify_path(source)
-    destination_folder = validate_destination_folder(
-        infer_destination_folder(
-            source,
-            document_text=document_text,
-            semantic_rules=semantic_rules,
-            fallback_folder=fallback_folder,
-        )
+    decision = infer_destination(
+        source,
+        document_text=document_text,
+        semantic_rules=semantic_rules,
+        fallback_folder=fallback_folder,
+        rule_precedence=rule_precedence,
+        disabled_builtin_rules=disabled_builtin_rules,
     )
+    destination_folder = validate_destination_folder(decision.folder)
     destination = target_root / destination_folder / source.name
     validate_destination(destination, target_root)
 
@@ -57,6 +68,7 @@ def plan_file_with_document_text(
         source=source,
         destination=destination,
         category=category,
+        classification=decision,
     )
 
 
@@ -66,14 +78,21 @@ def build_organization_plan(
     *,
     semantic_rules: Iterable[SemanticFolderRule] | None = None,
     fallback_folder: str | None = DEFAULT_FALLBACK_FOLDER,
+    rule_precedence: RulePrecedence = "builtins-first",
+    disabled_builtin_rules: Iterable[str] = (),
 ) -> list[PlannedMove]:
-    """Build move plans for multiple files without touching the filesystem."""
+    """Build move plans for multiple files."""
+    rule_list = tuple(semantic_rules) if semantic_rules is not None else None
+    disabled_ids = tuple(disabled_builtin_rules)
+
     return [
         plan_file(
             source,
             target_root,
-            semantic_rules=semantic_rules,
+            semantic_rules=rule_list,
             fallback_folder=fallback_folder,
+            rule_precedence=rule_precedence,
+            disabled_builtin_rules=disabled_ids,
         )
         for source in sources
     ]
@@ -86,15 +105,22 @@ def build_organization_plan_with_document_texts(
     *,
     semantic_rules: Iterable[SemanticFolderRule] | None = None,
     fallback_folder: str | None = DEFAULT_FALLBACK_FOLDER,
+    rule_precedence: RulePrecedence = "builtins-first",
+    disabled_builtin_rules: Iterable[str] = (),
 ) -> list[PlannedMove]:
     """Build move plans using caller-provided document text."""
+    rule_list = tuple(semantic_rules) if semantic_rules is not None else None
+    disabled_ids = tuple(disabled_builtin_rules)
+
     return [
         plan_file_with_document_text(
             source,
             target_root,
             document_texts.get(source, ""),
-            semantic_rules=semantic_rules,
+            semantic_rules=rule_list,
             fallback_folder=fallback_folder,
+            rule_precedence=rule_precedence,
+            disabled_builtin_rules=disabled_ids,
         )
         for source in sources
     ]
@@ -199,6 +225,7 @@ def resolve_destination_conflicts(plan: Iterable[PlannedMove]) -> list[PlannedMo
                 move.destination,
             ),
             category=move.category,
+            classification=move.classification,
         )
         for move in moves
     ]

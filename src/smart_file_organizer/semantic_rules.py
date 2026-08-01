@@ -9,7 +9,10 @@ from typing import Literal
 from smart_file_organizer.classification import classify_path
 from smart_file_organizer.config import DEFAULT_FALLBACK_FOLDER
 from smart_file_organizer.models import (
+    ClassificationDecision,
+    ClassificationSource,
     FileCategory,
+    RulePrecedence,
     SemanticFolderRule,
     SemanticRuleDefinition,
 )
@@ -35,11 +38,13 @@ _GENERIC_CONTENT_KEYWORDS = frozenset(
 
 @dataclass(frozen=True)
 class _CompiledSemanticRule:
-    """A semantic rule with compiled regex patterns."""
+    """A semantic rule with identity and compiled patterns."""
 
     folder: str
     keywords: tuple[str, ...]
     compiled_patterns: tuple[re.Pattern[str], ...]
+    rule_id: str
+    source: ClassificationSource
 
 
 _SEMANTIC_FOLDER_RULES: tuple[SemanticFolderRule, ...] = (
@@ -224,39 +229,65 @@ def _coerce_semantic_rule(rule: SemanticFolderRule) -> SemanticRuleDefinition:
     return SemanticRuleDefinition(folder=folder, keywords=keywords)
 
 
-def _compile_semantic_rule(rule: SemanticRuleDefinition) -> _CompiledSemanticRule:
-    """Compile regex patterns for a semantic rule."""
+def _builtin_rule_id(folder: str) -> str:
+    """Return the stable identifier for a built-in rule."""
+    return f"builtin:{folder}"
+
+
+def _compile_semantic_rule(
+    rule: SemanticRuleDefinition,
+    *,
+    source: ClassificationSource,
+    default_rule_id: str,
+) -> _CompiledSemanticRule:
+    """Compile one identified semantic rule."""
     return _CompiledSemanticRule(
         folder=rule.folder,
         keywords=rule.keywords,
         compiled_patterns=tuple(re.compile(pattern) for pattern in rule.patterns),
+        rule_id=rule.rule_id or default_rule_id,
+        source=source,
     )
 
 
 def _normalize_semantic_rules(
     semantic_rules: Iterable[SemanticFolderRule] | None,
+    *,
+    rule_precedence: RulePrecedence = "builtins-first",
+    disabled_builtin_rules: Iterable[str] = (),
 ) -> tuple[_CompiledSemanticRule, ...]:
-    """Return built-in rules merged with caller-provided rules.
+    """Return enabled built-ins and configured rules in policy order."""
+    disabled_ids = set(disabled_builtin_rules)
+    builtin_rules: list[_CompiledSemanticRule] = []
 
-    Built-in rules are evaluated first, then user rules, so default
-    classifications stay stable and custom rules extend coverage.
-    """
-    if semantic_rules is None:
-        return tuple(
-            _compile_semantic_rule(_coerce_semantic_rule(rule))
-            for rule in _SEMANTIC_FOLDER_RULES
+    for raw_rule in _SEMANTIC_FOLDER_RULES:
+        definition = _coerce_semantic_rule(raw_rule)
+        compiled = _compile_semantic_rule(
+            definition,
+            source=ClassificationSource.BUILTIN_RULE,
+            default_rule_id=_builtin_rule_id(definition.folder),
         )
 
-    user_rules = tuple(
-        _compile_semantic_rule(_coerce_semantic_rule(rule)) for rule in semantic_rules
-    )
-    return (
-        tuple(
-            _compile_semantic_rule(_coerce_semantic_rule(rule))
-            for rule in _SEMANTIC_FOLDER_RULES
+        if compiled.rule_id not in disabled_ids:
+            builtin_rules.append(compiled)
+
+    configured_rules = tuple(
+        _compile_semantic_rule(
+            _coerce_semantic_rule(rule),
+            source=ClassificationSource.CONFIGURED_RULE,
+            default_rule_id=f"configured:{index}",
         )
-        + user_rules
+        for index, rule in enumerate(
+            semantic_rules or (),
+            start=1,
+        )
     )
+    builtins = tuple(builtin_rules)
+
+    if rule_precedence == "configured-first":
+        return configured_rules + builtins
+
+    return builtins + configured_rules
 
 
 def _contains_whole_term(term: str, search_text: str) -> bool:
@@ -301,21 +332,57 @@ def _rule_matches_search_text(
     search_text: str,
     *,
     match_target: MatchTarget,
-) -> bool:
-    """Return True when a semantic rule matches searchable text."""
-    if any(
-        _keyword_matches_search_text(keyword, search_text, match_target=match_target)
-        for keyword in rule.keywords
-    ):
-        return True
+) -> tuple[str, str] | None:
+    """Return the first matching mechanism and value."""
+    for keyword in rule.keywords:
+        if _keyword_matches_search_text(
+            keyword,
+            search_text,
+            match_target=match_target,
+        ):
+            return ("keyword", keyword)
 
     if match_target == "path":
-        return any(
-            _pattern_matches_search_text(pattern, search_text)
-            for pattern in rule.compiled_patterns
+        for pattern in rule.compiled_patterns:
+            if _pattern_matches_search_text(
+                pattern,
+                search_text,
+            ):
+                return ("pattern", pattern.pattern)
+
+    return None
+
+
+def _match_semantic_rule(
+    search_text: str,
+    rules: tuple[_CompiledSemanticRule, ...],
+    *,
+    match_target: MatchTarget = "path",
+) -> ClassificationDecision | None:
+    """Return the first matching semantic decision."""
+    for rule in rules:
+        match = _rule_matches_search_text(
+            rule,
+            search_text,
+            match_target=match_target,
         )
 
-    return False
+        if match is None:
+            continue
+
+        match_kind, match_value = match
+
+        return ClassificationDecision(
+            folder=Path(rule.folder),
+            source=rule.source,
+            rule_id=rule.rule_id,
+            match_target=match_target,
+            reason=(
+                f"{rule.rule_id} matched {match_kind} {match_value!r} in {match_target}"
+            ),
+        )
+
+    return None
 
 
 def _match_semantic_folder(
@@ -325,11 +392,13 @@ def _match_semantic_folder(
     match_target: MatchTarget = "path",
 ) -> Path | None:
     """Return the first semantic folder matching searchable text."""
-    for rule in rules:
-        if _rule_matches_search_text(rule, search_text, match_target=match_target):
-            return Path(rule.folder)
+    decision = _match_semantic_rule(
+        search_text,
+        rules,
+        match_target=match_target,
+    )
 
-    return None
+    return decision.folder if decision is not None else None
 
 
 def _default_category_folder(
@@ -344,35 +413,88 @@ def _default_category_folder(
     return Path(category.value)
 
 
+def infer_destination(
+    path: Path,
+    *,
+    document_text: str = "",
+    semantic_rules: Iterable[SemanticFolderRule] | None = None,
+    fallback_folder: str | None = DEFAULT_FALLBACK_FOLDER,
+    rule_precedence: RulePrecedence = "builtins-first",
+    disabled_builtin_rules: Iterable[str] = (),
+) -> ClassificationDecision:
+    """Infer a destination and retain its classification reason."""
+    rules = _normalize_semantic_rules(
+        semantic_rules,
+        rule_precedence=rule_precedence,
+        disabled_builtin_rules=disabled_builtin_rules,
+    )
+    path_search_text = _path_search_text(path)
+
+    if path_decision := _match_semantic_rule(
+        path_search_text,
+        rules,
+        match_target="path",
+    ):
+        return path_decision
+
+    suffixes = tuple(suffix.lower() for suffix in path.suffixes)
+
+    if any(suffix in {".epub", ".azw3"} for suffix in suffixes):
+        return ClassificationDecision(
+            folder=Path("books/fiction"),
+            source=ClassificationSource.SPECIAL_CASE,
+            match_target="extension",
+            reason=("ebook extension selected the built-in books/fiction special case"),
+        )
+
+    category = classify_path(path)
+
+    if category != FileCategory.DOCUMENTS:
+        return ClassificationDecision(
+            folder=Path(category.value),
+            source=ClassificationSource.EXTENSION,
+            match_target="extension",
+            reason=(f"extension classification selected category {category.value!r}"),
+        )
+
+    if document_text:
+        content_search_text = _normalize_search_text(document_text)
+
+        if content_decision := _match_semantic_rule(
+            content_search_text,
+            rules,
+            match_target="content",
+        ):
+            return content_decision
+
+    folder = _default_category_folder(
+        category,
+        fallback_folder=fallback_folder,
+    )
+
+    return ClassificationDecision(
+        folder=folder,
+        source=ClassificationSource.FALLBACK,
+        match_target="fallback",
+        reason=(f"no semantic rule matched; selected fallback folder {str(folder)!r}"),
+    )
+
+
 def infer_destination_folder(
     path: Path,
     *,
     document_text: str = "",
     semantic_rules: Iterable[SemanticFolderRule] | None = None,
     fallback_folder: str | None = DEFAULT_FALLBACK_FOLDER,
+    rule_precedence: RulePrecedence = "builtins-first",
+    disabled_builtin_rules: Iterable[str] = (),
 ) -> Path:
-    """Infer a semantic destination folder for a path."""
-    rules = _normalize_semantic_rules(semantic_rules)
-    path_search_text = _path_search_text(path)
-
-    if path_semantic_folder := _match_semantic_folder(path_search_text, rules):
-        return path_semantic_folder
-
-    suffixes = tuple(suffix.lower() for suffix in path.suffixes)
-    if any(suffix in {".epub", ".azw3"} for suffix in suffixes):
-        return Path("books/fiction")
-
-    category = classify_path(path)
-    if category != FileCategory.DOCUMENTS:
-        return Path(category.value)
-
-    if document_text:
-        content_search_text = _normalize_search_text(document_text)
-        if content_semantic_folder := _match_semantic_folder(
-            content_search_text,
-            rules,
-            match_target="content",
-        ):
-            return content_semantic_folder
-
-    return _default_category_folder(category, fallback_folder=fallback_folder)
+    """Infer a semantic folder while preserving the legacy API."""
+    return infer_destination(
+        path,
+        document_text=document_text,
+        semantic_rules=semantic_rules,
+        fallback_folder=fallback_folder,
+        rule_precedence=rule_precedence,
+        disabled_builtin_rules=disabled_builtin_rules,
+    ).folder
