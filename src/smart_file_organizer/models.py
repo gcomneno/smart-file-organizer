@@ -1,6 +1,7 @@
 """Domain models for file organization."""
 
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Literal
@@ -18,6 +19,15 @@ class FileCategory(StrEnum):
     VIDEOS = "videos"
 
 
+class MoveStatus(StrEnum):
+    """Durable execution states for one planned move."""
+
+    UNATTEMPTED = "unattempted"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
 @dataclass(frozen=True)
 class PlannedMove:
     """A planned file move that has not been executed yet."""
@@ -25,6 +35,62 @@ class PlannedMove:
     source: Path
     destination: Path
     category: FileCategory
+
+
+@dataclass(frozen=True)
+class MoveExecutionRecord:
+    """Truthful outcome and recovery evidence for one planned move."""
+
+    original_path: Path
+    final_path: Path
+    category: FileCategory
+    status: MoveStatus
+    timestamp: datetime
+    error_type: str | None = None
+    error_message: str | None = None
+
+
+@dataclass(frozen=True)
+class ExecutionResult:
+    """First-class result of applying a complete move plan."""
+
+    manifest_path: Path
+    started_at: datetime
+    finished_at: datetime
+    moves: tuple[MoveExecutionRecord, ...]
+
+    def count(self, status: MoveStatus) -> int:
+        """Return the number of moves with the selected status."""
+        return sum(record.status == status for record in self.moves)
+
+    @property
+    def completed_count(self) -> int:
+        """Return the number of completed moves."""
+        return self.count(MoveStatus.COMPLETED)
+
+    @property
+    def failed_count(self) -> int:
+        """Return the number of failed moves."""
+        return self.count(MoveStatus.FAILED)
+
+    @property
+    def unattempted_count(self) -> int:
+        """Return the number of moves that were not attempted."""
+        return self.count(MoveStatus.UNATTEMPTED)
+
+    @property
+    def in_progress_count(self) -> int:
+        """Return the number of moves left in an indeterminate state."""
+        return self.count(MoveStatus.IN_PROGRESS)
+
+    @property
+    def successful(self) -> bool:
+        """Return whether every planned move completed."""
+        return (
+            self.failed_count == 0
+            and self.unattempted_count == 0
+            and self.in_progress_count == 0
+        )
 
 
 @dataclass(frozen=True)

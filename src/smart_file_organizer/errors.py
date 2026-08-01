@@ -27,3 +27,11 @@ class UnsafePathError(ValueError):
 
 class DestinationExistsError(FileExistsError):
     """Raised when a planned destination already exists."""
+
+
+class DestinationParentError(OSError):
+    """Raised when a destination parent cannot be prepared safely."""
+
+
+class ManifestWriteError(OSError):
+    """Raised when durable apply evidence cannot be persisted."""

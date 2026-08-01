@@ -21,6 +21,7 @@ from smart_file_organizer.core import (
     build_organization_plan,
     execute_plan,
     find_destination_conflicts,
+    format_execution_summary,
     list_source_files,
     resolve_destination_conflicts,
 )
@@ -28,7 +29,9 @@ from smart_file_organizer.errors import (
     ConfigError,
     DestinationConflictError,
     DestinationExistsError,
+    DestinationParentError,
     InvalidSourceError,
+    ManifestWriteError,
     SourceMissingError,
     SourceSelectionError,
     UnsafePathError,
@@ -289,9 +292,10 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     if args.apply:
         try:
-            execute_plan(plan, args.target)
+            result = execute_plan(plan, args.target)
         except (
             DestinationExistsError,
+            DestinationParentError,
             SourceMissingError,
             DestinationConflictError,
             InvalidSourceError,
@@ -299,8 +303,24 @@ def main(argv: Sequence[str] | None = None) -> None:
         ) as error:
             logger.error("event=plan_apply_failed error_type=%s", type(error).__name__)
             parser.error(str(error))
+        except ManifestWriteError as error:
+            logger.error("event=manifest_write_failed")
+            parser.exit(1, f"error: {error}\n")
 
-        logger.info("event=plan_applied count=%s", len(plan))
+        summary = format_execution_summary(result)
+
+        if result.failed_count:
+            sys.stderr.write(summary)
+            logger.error(
+                "event=plan_apply_partial completed=%s failed=%s unattempted=%s",
+                result.completed_count,
+                result.failed_count,
+                result.unattempted_count,
+            )
+            raise SystemExit(1)
+
+        sys.stdout.write(summary)
+        logger.info("event=plan_applied count=%s", result.completed_count)
         return
 
     sys.stdout.write(render_plan_preview(plan, output_format=args.format))
