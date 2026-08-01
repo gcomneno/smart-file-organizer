@@ -8,6 +8,7 @@ from typing import Any
 import tomllib
 
 from smart_file_organizer.errors import ConfigError
+from smart_file_organizer.path_validation import validate_destination_folder
 
 
 DEFAULT_FALLBACK_FOLDER = "documents/inbox"
@@ -57,7 +58,12 @@ def _parse_fallback_folder(data: Mapping[str, Any]) -> str:
     if not isinstance(fallback_folder, str) or not fallback_folder.strip():
         raise ConfigError("fallback_folder must be a non-empty string")
 
-    return fallback_folder.strip()
+    parsed_folder = fallback_folder.strip()
+    try:
+        validate_destination_folder(parsed_folder)
+    except ValueError as error:
+        raise ConfigError(str(error)) from error
+    return parsed_folder
 
 
 def _parse_semantic_rule(data: object) -> SemanticRule:
@@ -106,8 +112,14 @@ def _parse_semantic_rule(data: object) -> SemanticRule:
     if not parsed_keywords and not parsed_patterns:
         raise ConfigError("semantic rule must define keywords and/or patterns")
 
+    parsed_folder = folder.strip()
+    try:
+        validate_destination_folder(parsed_folder)
+    except ValueError as error:
+        raise ConfigError(str(error)) from error
+
     return SemanticRule(
-        folder=folder,
+        folder=parsed_folder,
         keywords=tuple(parsed_keywords),
         patterns=tuple(parsed_patterns),
     )

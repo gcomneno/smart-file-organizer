@@ -28,8 +28,15 @@ from smart_file_organizer.errors import (
     ConfigError,
     DestinationConflictError,
     DestinationExistsError,
+    InvalidSourceError,
     SourceMissingError,
     SourceSelectionError,
+    UnsafePathError,
+)
+from smart_file_organizer.path_validation import (
+    validate_plan_destinations,
+    validate_scan_target,
+    validate_source_files,
 )
 from smart_file_organizer.plan_output import render_plan_preview
 
@@ -160,6 +167,7 @@ def collect_sources(
 
         return list_source_files(source_root, recursive=recursive)
 
+    validate_source_files(explicit_sources)
     return list(explicit_sources)
 
 
@@ -211,6 +219,10 @@ def main(argv: Sequence[str] | None = None) -> None:
             args.sources,
             recursive=args.recursive,
         )
+        if args.source_root is not None:
+            validate_scan_target(
+                args.source_root, args.target, recursive=args.recursive
+            )
         logger.info("event=sources_collected count=%s", len(sources))
 
         config = load_config(args.config) if args.config is not None else None
@@ -218,7 +230,13 @@ def main(argv: Sequence[str] | None = None) -> None:
             logger.info(
                 "event=config_loaded semantic_rules=%s", len(config.semantic_rules)
             )
-    except (OSError, ConfigError, SourceSelectionError) as error:
+    except (
+        OSError,
+        ConfigError,
+        InvalidSourceError,
+        SourceSelectionError,
+        UnsafePathError,
+    ) as error:
         parser.error(str(error))
 
     semantic_rules = semantic_rules_from_config(config)
@@ -226,21 +244,24 @@ def main(argv: Sequence[str] | None = None) -> None:
         config.fallback_folder if config is not None else DEFAULT_FALLBACK_FOLDER
     )
 
-    if args.inspect_content:
-        plan = build_organization_plan_inspecting_content(
-            sources,
-            args.target,
-            semantic_rules=semantic_rules,
-            fallback_folder=fallback_folder,
-            verbose=args.verbose,
-        )
-    else:
-        plan = build_organization_plan(
-            sources,
-            args.target,
-            semantic_rules=semantic_rules,
-            fallback_folder=fallback_folder,
-        )
+    try:
+        if args.inspect_content:
+            plan = build_organization_plan_inspecting_content(
+                sources,
+                args.target,
+                semantic_rules=semantic_rules,
+                fallback_folder=fallback_folder,
+                verbose=args.verbose,
+            )
+        else:
+            plan = build_organization_plan(
+                sources,
+                args.target,
+                semantic_rules=semantic_rules,
+                fallback_folder=fallback_folder,
+            )
+    except (InvalidSourceError, UnsafePathError) as error:
+        parser.error(str(error))
 
     logger.info(
         "event=plan_built count=%s inspect_content=%s", len(plan), args.inspect_content
@@ -261,13 +282,20 @@ def main(argv: Sequence[str] | None = None) -> None:
         logger.warning("event=destination_conflicts count=%s", len(conflicts))
         parser.error(format_destination_conflicts(conflicts))
 
+    try:
+        validate_plan_destinations(plan, args.target)
+    except UnsafePathError as error:
+        parser.error(str(error))
+
     if args.apply:
         try:
-            execute_plan(plan)
+            execute_plan(plan, args.target)
         except (
             DestinationExistsError,
             SourceMissingError,
             DestinationConflictError,
+            InvalidSourceError,
+            UnsafePathError,
         ) as error:
             logger.error("event=plan_apply_failed error_type=%s", type(error).__name__)
             parser.error(str(error))

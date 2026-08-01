@@ -22,7 +22,9 @@ from smart_file_organizer.core import (
 from smart_file_organizer.errors import (
     DestinationConflictError,
     DestinationExistsError,
+    InvalidSourceError,
     SourceMissingError,
+    UnsafePathError,
 )
 
 
@@ -234,7 +236,7 @@ def test_execute_plan_moves_renamed_conflict_destinations(tmp_path: Path) -> Non
         build_organization_plan([first_source, second_source], target_root)
     )
 
-    execute_plan(plan)
+    execute_plan(plan, target_root)
 
     assert not first_source.exists()
     assert not second_source.exists()
@@ -260,7 +262,7 @@ def test_execute_plan_moves_files_and_creates_destination_directories(
         target_root,
     )
 
-    execute_plan(plan)
+    execute_plan(plan, target_root)
 
     assert not photo.exists()
     assert not notes.exists()
@@ -287,7 +289,7 @@ def test_execute_plan_rejects_existing_destination(tmp_path: Path) -> None:
     ]
 
     with pytest.raises(FileExistsError, match="destination already exists"):
-        execute_plan(plan)
+        execute_plan(plan, tmp_path / "organized")
 
     assert source.read_text() == "new image"
     assert destination.read_text() == "existing image"
@@ -306,7 +308,7 @@ def test_execute_plan_rejects_missing_source(tmp_path: Path) -> None:
     ]
 
     with pytest.raises(FileNotFoundError, match="source file does not exist"):
-        execute_plan(plan)
+        execute_plan(plan, tmp_path / "organized")
 
     assert not destination.exists()
 
@@ -336,7 +338,7 @@ def test_execute_plan_rejects_destination_conflicts(tmp_path: Path) -> None:
     ]
 
     with pytest.raises(ValueError, match="plan contains destination conflicts"):
-        execute_plan(plan)
+        execute_plan(plan, tmp_path / "organized")
 
     assert first_source.read_text() == "first"
     assert second_source.read_text() == "second"
@@ -704,16 +706,16 @@ def test_build_organization_plan_with_document_texts_uses_configured_rules() -> 
     assert plan[0].destination == Path("organized/learning/demo-course/notes.txt")
 
 
-def test_execute_plan_raises_destination_conflict_error() -> None:
+def test_execute_plan_raises_destination_conflict_error(tmp_path: Path) -> None:
     destination = Path("organized/images/photo.jpg")
     plan = [
         PlannedMove(
-            source=Path("folder-a/photo.jpg"),
+            source=tmp_path / "folder-a/photo.jpg",
             destination=destination,
             category=FileCategory.IMAGES,
         ),
         PlannedMove(
-            source=Path("folder-b/photo.jpg"),
+            source=tmp_path / "folder-b/photo.jpg",
             destination=destination,
             category=FileCategory.IMAGES,
         ),
@@ -723,7 +725,7 @@ def test_execute_plan_raises_destination_conflict_error() -> None:
         DestinationConflictError,
         match="plan contains destination conflicts",
     ):
-        execute_plan(plan)
+        execute_plan(plan, Path("organized"))
 
 
 def test_execute_plan_raises_source_missing_error(tmp_path: Path) -> None:
@@ -742,7 +744,7 @@ def test_execute_plan_raises_source_missing_error(tmp_path: Path) -> None:
         SourceMissingError,
         match=f"source file does not exist: {missing_source}",
     ):
-        execute_plan(plan)
+        execute_plan(plan, tmp_path / "organized")
 
 
 def test_execute_plan_raises_destination_exists_error(tmp_path: Path) -> None:
@@ -765,4 +767,113 @@ def test_execute_plan_raises_destination_exists_error(tmp_path: Path) -> None:
         DestinationExistsError,
         match=f"destination already exists: {destination}",
     ):
-        execute_plan(plan)
+        execute_plan(plan, tmp_path / "organized")
+
+
+def test_plan_file_accepts_nested_destination_beneath_target(tmp_path: Path) -> None:
+    target_root = tmp_path / "organized"
+
+    move = plan_file(Path("notes.txt"), target_root)
+
+    assert move.destination == target_root / "documents" / "inbox" / "notes.txt"
+
+
+def test_plan_file_rejects_destination_folder_that_escapes_target(
+    tmp_path: Path,
+) -> None:
+    rules = (SemanticRuleDefinition(folder="../escaped", keywords=("synthetic",)),)
+
+    with pytest.raises(UnsafePathError, match="must not contain"):
+        plan_file(
+            Path("synthetic.pdf"),
+            tmp_path / "organized",
+            semantic_rules=rules,
+        )
+
+
+def test_plan_file_rejects_resolved_destination_that_escapes_target(
+    tmp_path: Path,
+) -> None:
+    target_root = tmp_path / "organized"
+    outside = tmp_path / "outside"
+    target_root.mkdir()
+    outside.mkdir()
+    (target_root / "linked").symlink_to(outside, target_is_directory=True)
+    rules = (SemanticRuleDefinition(folder="linked", keywords=("synthetic",)),)
+
+    with pytest.raises(UnsafePathError, match="outside target"):
+        plan_file(
+            Path("synthetic.pdf"),
+            target_root,
+            semantic_rules=rules,
+        )
+
+
+def test_execute_plan_rejects_programmatic_destination_outside_target(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "notes.txt"
+    source.write_text("notes")
+    plan = [
+        PlannedMove(
+            source=source,
+            destination=tmp_path / "escaped" / "notes.txt",
+            category=FileCategory.DOCUMENTS,
+        )
+    ]
+
+    with pytest.raises(UnsafePathError, match="outside target"):
+        execute_plan(plan, tmp_path / "organized")
+
+    assert source.exists()
+    assert not (tmp_path / "escaped" / "notes.txt").exists()
+
+
+def test_execute_plan_rejects_directory_source_before_moving_anything(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "notes.txt"
+    source.write_text("notes")
+    directory_source = tmp_path / "directory"
+    directory_source.mkdir()
+    target_root = tmp_path / "organized"
+    plan = [
+        PlannedMove(
+            source=source,
+            destination=target_root / "documents" / "notes.txt",
+            category=FileCategory.DOCUMENTS,
+        ),
+        PlannedMove(
+            source=directory_source,
+            destination=target_root / "other" / "directory",
+            category=FileCategory.OTHER,
+        ),
+    ]
+
+    with pytest.raises(InvalidSourceError, match="source path is not a file"):
+        execute_plan(plan, target_root)
+
+    assert source.exists()
+    assert directory_source.is_dir()
+    assert not target_root.exists()
+
+
+def test_execute_plan_moves_file_symlink_as_link_and_keeps_referent(
+    tmp_path: Path,
+) -> None:
+    referent = tmp_path / "referent.txt"
+    referent.write_text("notes")
+
+    source = tmp_path / "link.txt"
+    source.symlink_to(referent)
+
+    target_root = tmp_path / "organized"
+    plan = build_organization_plan([source], target_root)
+
+    execute_plan(plan, target_root)
+
+    destination = target_root / "documents" / "inbox" / "link.txt"
+    assert destination.is_symlink()
+    assert destination.read_text() == "notes"
+    assert referent.read_text() == "notes"
+    assert not source.exists()
