@@ -602,6 +602,29 @@ manual-runs/
 
 Synthetic examples are preferred for tests and documentation.
 
+## Supported platform and filesystem-risk coverage
+
+The supported operating-system boundary is **Linux only**. CI exercises the
+complete suite on Python 3.11 and Python 3.12 on Linux. Windows and macOS are
+not currently claimed or tested.
+
+The regression contract for the supported platform includes:
+
+- a source that disappears after preflight but before its move is recorded as
+  `failed`, later moves remain `unattempted`, and the CLI returns the durable
+  manifest through its public error output;
+- a read-only destination parent produces status `2`, preserves the source,
+  creates no recovery manifest, and emits one concise error line without a
+  traceback or duplicate log record;
+- Linux case-sensitive names such as `Report.txt` and `report.txt` remain
+  distinct sources and distinct destinations;
+- a bounded synthetic dry run covers 512 direct files through the public CLI,
+  expects exactly 512 preview lines, and must not create the target directory.
+
+The 512-file check is a regression smoke test, not a performance benchmark or
+latency guarantee. Filesystems with case-insensitive behavior and operating
+systems outside Linux remain outside the current support claim.
+
 ## Current limitations
 
 - Content inspection is opt-in and currently limited to supported document types.
