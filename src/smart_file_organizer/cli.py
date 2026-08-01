@@ -38,6 +38,7 @@ from smart_file_organizer.errors import (
 )
 from smart_file_organizer.path_validation import (
     validate_plan_destinations,
+    validate_scan_source_root,
     validate_scan_target,
     validate_source_files,
 )
@@ -71,18 +72,24 @@ def _add_plan_arguments(parser: argparse.ArgumentParser) -> None:
         "sources",
         nargs="*",
         type=Path,
-        help="Files to include in the organization plan.",
+        help=(
+            "Regular files or symlinks to regular files. "
+            "Broken and directory symlinks are rejected."
+        ),
     )
     parser.add_argument(
         "--from",
         dest="source_root",
         type=Path,
-        help="Source directory to scan for files.",
+        help=("Real source directory to scan. Directory symlinks are rejected."),
     )
     parser.add_argument(
         "--recursive",
         action="store_true",
-        help="Scan nested directories when using --from. Disabled by default.",
+        help=(
+            "Scan nested directories without following directory symlinks. "
+            "Hidden files are included. Disabled by default."
+        ),
     )
     parser.add_argument(
         "--target",
@@ -160,6 +167,8 @@ def collect_sources(
         raise SourceSelectionError("--recursive requires --from")
 
     if source_root is not None:
+        validate_scan_source_root(source_root)
+
         if not source_root.exists():
             raise SourceSelectionError(
                 f"source directory does not exist: {source_root}"

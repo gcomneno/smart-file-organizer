@@ -171,7 +171,7 @@ Content inspection is also opt-in. Document text is read only when `--inspect-co
 Before applying a plan, the program checks that:
 
 - no two source files would be moved to the same destination;
-- every source exists and is a file;
+- every source is a regular file or a symlink to a regular file;
 - every resolved destination remains beneath the resolved target root;
 - no destination file already exists.
 
@@ -181,6 +181,30 @@ contain `..` components. Resolved destination containment is checked both while
 planning and again immediately before applying a plan.
 
 If any of these checks fail, the command stops with an error.
+
+## Symlink and hidden-file policy
+
+Source handling follows one deterministic policy during collection, preview,
+and apply:
+
+- regular files are included;
+- symlinks to regular files are included and moved as symbolic links;
+- file symlinks are not dereferenced and their referent is not moved;
+- directory symlinks are never traversed;
+- a directory symlink cannot be used as the `--from` scan root;
+- broken symlinks are rejected when passed explicitly and ignored during scans;
+- hidden files are included in both direct and recursive scans;
+- hidden directories are traversed when `--recursive` is enabled.
+
+Recursive traversal explicitly checks symbolic links before considering a path
+as a directory. Directory-link cycles therefore cannot cause recursive
+traversal or duplicate discovery.
+
+Moving a file symlink preserves the link object and its stored target text.
+An absolute link therefore continues to identify the same absolute target.
+A relative link can resolve differently after being moved into another
+directory and may become broken. The organizer does not silently rewrite,
+dereference, or repair relative symlinks.
 
 ## Apply results and recovery manifests
 
