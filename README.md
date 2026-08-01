@@ -3,7 +3,7 @@
 [![CI](https://github.com/gcomneno/smart-file-organizer/actions/workflows/ci.yml/badge.svg)](https://github.com/gcomneno/smart-file-organizer/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-A small Python CLI project used as a clean-coding laboratory.
+A safe Python CLI for ordinary users and developers who want to preview and apply deterministic file-organization plans.
 
 The project organizes files by building a safe plan first. By default it only prints what it would do. Files are moved only when `--apply` is explicitly passed.
 
@@ -29,6 +29,56 @@ roadmap are documented in the
 - Uses `ruff` for formatting and linting.
 - Uses `ty` for static type checks.
 - Uses `pytest` for tests.
+
+## Installation
+
+GitHub Releases is the supported distribution channel. Releases provide a
+pure-Python wheel, a source distribution, and SHA-256 checksums.
+
+Requirements:
+
+- Linux;
+- Python 3.11 or Python 3.12;
+- `uv` for isolated command installation.
+
+Install version `0.4.0` directly from its release wheel:
+
+~~~bash
+uv tool install "https://github.com/gcomneno/smart-file-organizer/releases/download/v0.4.0/smart_file_organizer-0.4.0-py3-none-any.whl"
+~~~
+
+Verify the installed version and provenance:
+
+~~~bash
+smart-file-organizer --version
+uv tool list
+~~~
+
+Expected output:
+
+~~~text
+smart-file-organizer 0.4.0
+~~~
+
+Start with a dry run. Create a sample text file, then run:
+
+~~~bash
+smart-file-organizer plan \
+  --from "$HOME/smart-file-organizer-first-run/source" \
+  --target "$HOME/smart-file-organizer-first-run/organized"
+~~~
+
+The preview does not move the file. Review it before repeating the command with
+`--apply`.
+
+Each release includes `SHA256SUMS`. Verify downloaded package artifacts with:
+
+~~~bash
+sha256sum --check SHA256SUMS
+~~~
+
+The complete release procedure is documented in
+[docs/releasing.md](docs/releasing.md).
 
 ## Development setup
 
