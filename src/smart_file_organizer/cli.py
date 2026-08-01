@@ -100,7 +100,10 @@ def _add_plan_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--config",
         type=Path,
-        help="Optional TOML configuration file with semantic rules.",
+        help=(
+            "Optional TOML configuration with semantic rules, "
+            "precedence, and built-in rule disabling."
+        ),
     )
     parser.add_argument(
         "--apply",
@@ -126,6 +129,14 @@ def _add_plan_arguments(parser: argparse.ArgumentParser) -> None:
         choices=("text", "json"),
         default="text",
         help="Output format for plan preview. Defaults to text.",
+    )
+    parser.add_argument(
+        "--explain",
+        action="store_true",
+        help=(
+            "Include the classification source, rule, match target, "
+            "and reason in dry-run previews."
+        ),
     )
     parser.add_argument(
         "--conflict-strategy",
@@ -196,6 +207,7 @@ def semantic_rules_from_config(
             folder=rule.folder,
             keywords=rule.keywords,
             patterns=rule.patterns,
+            rule_id=rule.rule_id,
         )
         for rule in config.semantic_rules
     )
@@ -256,15 +268,41 @@ def main(argv: Sequence[str] | None = None) -> None:
     fallback_folder = (
         config.fallback_folder if config is not None else DEFAULT_FALLBACK_FOLDER
     )
+    rule_precedence = (
+        config.semantic_rule_precedence if config is not None else "builtins-first"
+    )
+    disabled_builtin_rules = config.disabled_builtin_rules if config is not None else ()
+
+    uses_default_rule_policy = (
+        rule_precedence == "builtins-first" and not disabled_builtin_rules
+    )
 
     try:
         if args.inspect_content:
-            plan = build_organization_plan_inspecting_content(
+            if uses_default_rule_policy:
+                plan = build_organization_plan_inspecting_content(
+                    sources,
+                    args.target,
+                    semantic_rules=semantic_rules,
+                    fallback_folder=fallback_folder,
+                    verbose=args.verbose,
+                )
+            else:
+                plan = build_organization_plan_inspecting_content(
+                    sources,
+                    args.target,
+                    semantic_rules=semantic_rules,
+                    fallback_folder=fallback_folder,
+                    rule_precedence=rule_precedence,
+                    disabled_builtin_rules=disabled_builtin_rules,
+                    verbose=args.verbose,
+                )
+        elif uses_default_rule_policy:
+            plan = build_organization_plan(
                 sources,
                 args.target,
                 semantic_rules=semantic_rules,
                 fallback_folder=fallback_folder,
-                verbose=args.verbose,
             )
         else:
             plan = build_organization_plan(
@@ -272,6 +310,8 @@ def main(argv: Sequence[str] | None = None) -> None:
                 args.target,
                 semantic_rules=semantic_rules,
                 fallback_folder=fallback_folder,
+                rule_precedence=rule_precedence,
+                disabled_builtin_rules=disabled_builtin_rules,
             )
     except (InvalidSourceError, UnsafePathError) as error:
         parser.error(str(error))
@@ -333,4 +373,10 @@ def main(argv: Sequence[str] | None = None) -> None:
         logger.info("event=plan_applied count=%s", result.completed_count)
         return
 
-    sys.stdout.write(render_plan_preview(plan, output_format=args.format))
+    sys.stdout.write(
+        render_plan_preview(
+            plan,
+            output_format=args.format,
+            explain=args.explain,
+        )
+    )

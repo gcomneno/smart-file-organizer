@@ -1,6 +1,6 @@
 """Domain models for file organization."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
@@ -28,6 +28,39 @@ class MoveStatus(StrEnum):
     FAILED = "failed"
 
 
+class ClassificationSource(StrEnum):
+    """Origin of a destination classification decision."""
+
+    BUILTIN_RULE = "built_in_rule"
+    CONFIGURED_RULE = "configured_rule"
+    SPECIAL_CASE = "special_case"
+    EXTENSION = "extension"
+    FALLBACK = "fallback"
+
+
+ClassificationMatchTarget = Literal[
+    "path",
+    "content",
+    "extension",
+    "fallback",
+]
+RulePrecedence = Literal[
+    "builtins-first",
+    "configured-first",
+]
+
+
+@dataclass(frozen=True)
+class ClassificationDecision:
+    """Explain why one destination folder was selected."""
+
+    folder: Path
+    source: ClassificationSource
+    reason: str
+    rule_id: str | None = None
+    match_target: ClassificationMatchTarget | None = None
+
+
 @dataclass(frozen=True)
 class PlannedMove:
     """A planned file move that has not been executed yet."""
@@ -35,6 +68,10 @@ class PlannedMove:
     source: Path
     destination: Path
     category: FileCategory
+    classification: ClassificationDecision | None = field(
+        default=None,
+        compare=False,
+    )
 
 
 @dataclass(frozen=True)
@@ -100,6 +137,7 @@ class SemanticRuleDefinition:
     folder: str
     keywords: tuple[str, ...] = ()
     patterns: tuple[str, ...] = ()
+    rule_id: str | None = None
 
 
 # Backward-compatible alias for keyword-only rules passed as tuples in tests.
