@@ -21,6 +21,12 @@ MatchTarget = Literal["path", "content"]
 
 _CONTENT_MIN_SINGLE_KEYWORD_LENGTH = 5
 
+_ABSOLUTE_PATH_START_RE = re.compile(r"(?<![\w:/])/|(?<![\w:])[A-Za-z]:[\\/]")
+_FILENAME_EXTENSION_RE = re.compile(r"\.[A-Za-z0-9]{1,16}$")
+_PATH_REFERENCE_TRAILING_PUNCTUATION = ".,;:!?)]}"
+_PATH_REFERENCE_QUOTES = "\"'`"
+_ROUTING_ARROW_MARKERS = ("->", "=>", "→")
+
 _GENERIC_CONTENT_KEYWORDS = frozenset(
     {
         "adi",
@@ -218,6 +224,52 @@ def _normalize_search_text(text: str) -> str:
 def _path_search_text(path: Path) -> str:
     """Return normalized searchable text for a path."""
     return _normalize_search_text(" ".join(path.parts))
+
+
+def _absolute_path_start(line: str) -> re.Match[str] | None:
+    """Return the start of an absolute filesystem path, if present."""
+    return _ABSOLUTE_PATH_START_RE.search(line)
+
+
+def _whole_line_absolute_filename_reference(line: str) -> bool:
+    """Return whether a line consists only of an absolute filename reference."""
+    path_reference = line.strip().rstrip(_PATH_REFERENCE_TRAILING_PUNCTUATION)
+
+    if (
+        len(path_reference) >= 2
+        and path_reference[0] in _PATH_REFERENCE_QUOTES
+        and path_reference[-1] == path_reference[0]
+    ):
+        path_reference = path_reference[1:-1].strip()
+
+    path_reference = path_reference.rstrip(_PATH_REFERENCE_TRAILING_PUNCTUATION)
+    path_start = _absolute_path_start(path_reference)
+    if path_start is None or path_start.start() != 0:
+        return False
+
+    filename = path_reference.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+    return bool(filename) and _FILENAME_EXTENSION_RE.search(filename) is not None
+
+
+def _should_exclude_content_line(line: str) -> bool:
+    """Return whether a line is an absolute-path reference unsuitable as content."""
+    path_start = _absolute_path_start(line)
+    if path_start is not None and any(
+        marker in line for marker in _ROUTING_ARROW_MARKERS
+    ):
+        return True
+
+    return _whole_line_absolute_filename_reference(line)
+
+
+def _prepare_content_search_text(document_text: str) -> str:
+    """Normalize descriptive content after omitting explicit path-reference lines."""
+    retained_lines = (
+        line
+        for line in document_text.splitlines()
+        if not _should_exclude_content_line(line)
+    )
+    return _normalize_search_text("\n".join(retained_lines))
 
 
 def _coerce_semantic_rule(rule: SemanticFolderRule) -> SemanticRuleDefinition:
@@ -458,7 +510,7 @@ def infer_destination(
         )
 
     if document_text:
-        content_search_text = _normalize_search_text(document_text)
+        content_search_text = _prepare_content_search_text(document_text)
 
         if content_decision := _match_semantic_rule(
             content_search_text,
