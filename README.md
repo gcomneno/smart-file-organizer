@@ -365,7 +365,7 @@ Each rule must define `keywords`, `patterns`, or both. Regex patterns apply to f
 
 Single-word keywords match as whole tokens in normalized path text, so short acronyms such as `adi` do not match inside unrelated words like `paradiso`. Multi-word phrases still use substring matching because they are already specific enough.
 
-Configured rules **extend** the built-in semantic rules; they do not replace them. Built-in rules are evaluated first, then rules from the TOML file, so default categories such as taxes, utilities, and insurance keep working while you add local keywords.
+Existing configurations remain compatible: when no new policy fields are present, built-in rules are evaluated before configured rules exactly as in earlier versions.
 
 When a keyword from either built-in or configured rules matches the file path or inspected document text, the matching folder is used as the destination subfolder.
 
@@ -376,6 +376,111 @@ fallback_folder = "documents/inbox"
 ~~~
 
 The fallback applies only to documents without a semantic match. Other categories such as images, audio, and `other` keep their default folders.
+
+## Classification audience, precedence, and explanations
+
+The built-in taxonomy is deliberately opinionated. It targets individual
+desktop and workstation users organizing mixed local files such as personal
+administration, utilities, taxes, health documents, learning material, books,
+media, and source code.
+
+It is not intended to be a universal records-management taxonomy, an enterprise
+document-management system, or a machine-learning classifier. A preview should
+always be reviewed before applying moves to a collection with different naming
+conventions.
+
+### Deterministic precedence
+
+Classification follows this order:
+
+1. semantic path rules, including filename and parent-directory components;
+2. ebook extension special cases for EPUB and AZW3;
+3. ordinary extension categories for non-document files;
+4. inspected content rules for documents when `--inspect-content` is enabled;
+5. the configured document fallback folder.
+
+Within the semantic path and content stages, rule ordering is controlled by:
+
+```toml
+semantic_rule_precedence = "builtins-first"
+```
+
+Supported values are:
+
+- `builtins-first`: compatibility default; built-ins win over configured rules;
+- `configured-first`: configured rules are evaluated first and can override an
+  applicable built-in match.
+
+Parent directories deliberately influence path matching because the normalized
+search value contains every component of the supplied source path. For example,
+a generic PDF inside a `yocto/` directory can match the Yocto built-in rule even
+when the filename itself is generic.
+
+### Configured rule IDs and overrides
+
+Configured rules may define stable IDs:
+
+```toml
+semantic_rule_precedence = "configured-first"
+
+[[semantic_rules]]
+id = "local:tax-archive"
+folder = "private/tax-archive"
+keywords = ["cu2026", "certificazione unica"]
+```
+
+The `id` field is optional. Rules without one receive deterministic runtime IDs
+such as `configured:1`. Explicit configured IDs must be unique and cannot use
+the reserved `builtin:` prefix.
+
+### Disabling built-in rules
+
+Applicable built-in rules can be disabled without removing the rest of the
+taxonomy:
+
+```toml
+disabled_builtin_rules = [
+  "builtin:documents/taxes",
+  "builtin:documents/vehicle",
+]
+```
+
+Stable built-in IDs are:
+
+- `builtin:documents/utilities/fastweb`
+- `builtin:documents/utilities/water`
+- `builtin:documents/inps-sfl`
+- `builtin:documents/taxes`
+- `builtin:documents/identity`
+- `builtin:documents/health`
+- `builtin:documents/legal-notifications`
+- `builtin:documents/bank-poste`
+- `builtin:documents/vehicle`
+- `builtin:documents/insurance`
+- `builtin:documents/work-admin`
+- `builtin:learning/kleis`
+- `builtin:learning/yocto`
+- `builtin:books/programming`
+- `builtin:photos/2026`
+
+Unknown IDs have no effect, allowing a shared configuration to remain usable
+across versions in which a built-in rule may not exist.
+
+### Explaining a classification
+
+Default previews remain unchanged. Add `--explain` to include the selected
+classification source, rule ID, match target, and reason:
+
+```bash
+uv run smart-file-organizer plan   --config smart-file-organizer.toml   --explain   CU2026_PERSON_A.pdf
+```
+
+JSON explanations are available by combining `--explain` with `--format json`.
+The additional `classification` object identifies whether the decision came
+from a built-in rule, configured rule, extension, special case, or fallback.
+
+`--explain` affects dry-run previews only. Apply summaries and durable recovery
+manifests retain their existing format.
 
 Private configuration files should not be committed. Use `smart-file-organizer.example.toml` as a public template and keep local/private rules in `smart-file-organizer.toml` or under ignored paths such as `.local-data/`.
 

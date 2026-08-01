@@ -1,3 +1,11 @@
+# Compatibility default: built-in semantic rules are
+# evaluated before configured rules. Use "configured-first"
+# when local rules must override applicable built-ins.
+semantic_rule_precedence = "builtins-first"
+
+# Disable selected built-ins by their stable IDs.
+disabled_builtin_rules = []
+
 # Example configuration for smart-file-organizer.
 #
 # Keep real/private rules outside Git. Use this file only as a public template.
