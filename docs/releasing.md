@@ -19,7 +19,8 @@ byte-for-byte.
 ## Publish
 
 After merging the reviewed release preparation into `main`, create and push an
-annotated tag matching the package version. For version `0.4.0`, use `v0.4.0`.
+annotated tag matching the package version. For package version `X.Y.Z`, use
+the tag `vX.Y.Z`.
 The tag starts `.github/workflows/release.yml`, which rebuilds, verifies, smoke
 tests, and attaches the artifacts to the GitHub Release.
 
