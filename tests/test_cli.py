@@ -868,3 +868,114 @@ def test_main_reports_partial_apply_with_durable_manifest(
     assert not first.exists()
     assert second.exists()
     assert third.exists()
+
+
+def test_main_reports_empty_directory_scan(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    source_root = tmp_path / "empty-source"
+    target_root = tmp_path / "organized"
+    source_root.mkdir()
+
+    main(
+        [
+            "plan",
+            "--from",
+            str(source_root),
+            "--target",
+            str(target_root),
+        ]
+    )
+
+    captured = capsys.readouterr()
+
+    assert captured.out == "No files found.\n"
+    assert captured.err == ""
+    assert not target_root.exists()
+
+
+def test_main_preserves_json_contract_for_empty_scan(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    source_root = tmp_path / "empty-source"
+    source_root.mkdir()
+
+    main(
+        [
+            "plan",
+            "--format",
+            "json",
+            "--from",
+            str(source_root),
+        ]
+    )
+
+    captured = capsys.readouterr()
+
+    assert captured.out == "[]\n"
+    assert captured.err == ""
+
+
+def test_main_empty_apply_reports_zero_counts_and_manifest(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    source_root = tmp_path / "empty-source"
+    target_root = tmp_path / "organized"
+    source_root.mkdir()
+
+    main(
+        [
+            "plan",
+            "--apply",
+            "--from",
+            str(source_root),
+            "--target",
+            str(target_root),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    output_lines = captured.out.splitlines()
+
+    assert output_lines[0] == ("Apply result: completed=0 failed=0 unattempted=0")
+    assert output_lines[1].startswith("Manifest: ")
+    assert Path(output_lines[1].removeprefix("Manifest: ")).is_file()
+    assert captured.err == ""
+
+
+def test_main_expected_error_is_concise_without_usage_or_traceback(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    missing_source = tmp_path / "missing.txt"
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(["plan", str(missing_source)])
+
+    captured = capsys.readouterr()
+
+    assert exc_info.value.code == 2
+    assert captured.out == ""
+    assert captured.err == (
+        f"smart-file-organizer: error: source file does not exist: {missing_source}\n"
+    )
+    assert "usage:" not in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_top_level_help_identifies_canonical_and_compatibility_syntax(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        main(["--help"])
+
+    captured = capsys.readouterr()
+    normalized = " ".join(captured.out.split())
+
+    assert exc_info.value.code == 0
+    assert captured.err == ""
+    assert "Canonical usage: smart-file-organizer plan" in normalized
+    assert "compatibility syntax" in normalized

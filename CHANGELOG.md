@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- use `smart-file-organizer plan ...` as the canonical onboarding syntax;
+- report empty text scans explicitly while preserving `[]` for JSON previews;
+- emit concise expected-error messages without an argparse usage dump;
+- document exit statuses and the owning operational-boundary sections.
+
 ## [0.4.0] - 2026-08-01
 
 ### Added

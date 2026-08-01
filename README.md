@@ -113,7 +113,7 @@ uv run ruff format .
 ### Dry run from explicit files
 
 ~~~bash
-uv run smart-file-organizer --target organized photo.jpg notes.txt script.py
+uv run smart-file-organizer plan --target organized photo.jpg notes.txt script.py
 ~~~
 
 Example output:
@@ -129,7 +129,7 @@ This does not move files.
 ### Dry run from a directory
 
 ~~~bash
-uv run smart-file-organizer --from /path/to/source --target /path/to/organized
+uv run smart-file-organizer plan --from /path/to/source --target /path/to/organized
 ~~~
 
 The command scans only direct files in the source directory by default.
@@ -141,7 +141,7 @@ This does not move files.
 Use `--recursive` with `--from` to include files from nested directories:
 
 ~~~bash
-uv run smart-file-organizer --from /path/to/source --recursive --target /path/to/organized
+uv run smart-file-organizer plan --from /path/to/source --recursive --target /path/to/organized
 ~~~
 
 Only files are included; directories themselves are not moved.
@@ -152,7 +152,7 @@ the target must also not be nested beneath the source directory.
 ### Dry run with content inspection
 
 ~~~bash
-uv run smart-file-organizer --inspect-content --from /path/to/source --target /path/to/organized
+uv run smart-file-organizer plan --inspect-content --from /path/to/source --target /path/to/organized
 ~~~
 
 This opt-in mode extracts text from supported documents and uses that text when building the plan.
@@ -173,7 +173,7 @@ Content-based semantic matching is stricter than filename matching: generic sing
 ### Apply the organization plan
 
 ~~~bash
-uv run smart-file-organizer --from /path/to/source --target /path/to/organized --apply
+uv run smart-file-organizer plan --from /path/to/source --target /path/to/organized --apply
 ~~~
 
 This moves files into category directories under the target root.
@@ -192,7 +192,7 @@ Example target layout:
 
 ## Command layout
 
-The CLI supports command groups. The primary command is currently `plan`:
+The canonical command form is `smart-file-organizer plan ...`:
 
 ~~~bash
 uv run smart-file-organizer plan --target organized photo.jpg
@@ -206,11 +206,35 @@ Use `--apply` explicitly to execute the plan:
 uv run smart-file-organizer plan --from Downloads --target organized --apply
 ~~~
 
-The original direct planning style is still supported as a compatibility path:
+Direct planning options without the `plan` command remain supported only as
+compatibility syntax for existing scripts. New documentation and automation
+should use the canonical command form:
 
 ~~~bash
 uv run smart-file-organizer --target organized photo.jpg
 ~~~
+
+## Operational boundaries
+
+The main safety and behavior contracts are documented in these owning sections:
+
+- [Safety behavior](#safety-behavior): dry-run default, preflight checks,
+  destination containment, and overwrite refusal;
+- [Content-inspection limits and failure policy](#content-inspection-limits-and-failure-policy):
+  supported formats, three-page PDF limit, no OCR, and warn-and-fallback
+  behavior;
+- [Symlink and hidden-file policy](#symlink-and-hidden-file-policy): inclusion,
+  traversal, and move semantics;
+- [Apply results and recovery manifests](#apply-results-and-recovery-manifests):
+  durable evidence, partial failure, manual recovery, and the absence of
+  filesystem-wide atomicity;
+- [Classification audience, precedence, and explanations](#classification-audience-precedence-and-explanations):
+  path context, inspected content, built-ins, configured rules, and overrides.
+
+Expected input, configuration, parser, and preflight failures exit with status
+`2` and one concise error line. A partial apply or manifest-persistence failure
+exits with status `1`. Successful commands exit with status `0`. Expected
+failures do not print Python tracebacks.
 
 ## Safety behavior
 
@@ -355,6 +379,23 @@ The first source in sorted order keeps the original destination name. Additional
 
 ## Output format
 
+### Empty scans
+
+A text preview from an empty source directory reports the result explicitly:
+
+~~~text
+No files found.
+~~~
+
+JSON preview keeps its structured contract and returns an empty array:
+
+~~~json
+[]
+~~~
+
+An empty `--apply` still creates a recovery manifest and reports
+`completed=0 failed=0 unattempted=0`. No source file is moved.
+
 By default, `plan` prints one move per line:
 
 ~~~text
@@ -391,7 +432,7 @@ JSON preview applies to dry-run output only. `--apply` does not print the plan.
 You can pass an optional TOML configuration file with semantic destination rules:
 
 ~~~bash
-uv run smart-file-organizer \
+uv run smart-file-organizer plan \
   --config smart-file-organizer.example.toml \
   --target organized \
   synthetic-invoice.pdf
@@ -541,7 +582,7 @@ The command is quiet by default.
 Use `--verbose` to enable high-level application logs:
 
 ~~~bash
-uv run smart-file-organizer --verbose --target organized photo.jpg
+uv run smart-file-organizer plan --verbose --target organized photo.jpg
 ~~~
 
 Verbose logs use simple key-value events such as `event=sources_collected count=1`.

@@ -5,6 +5,7 @@ import logging
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import Never
 
 from smart_file_organizer import __version__
 from smart_file_organizer.app_logging import configure_logging
@@ -49,11 +50,24 @@ from smart_file_organizer.plan_output import render_plan_preview
 logger = logging.getLogger(__name__)
 
 
+class CliArgumentParser(argparse.ArgumentParser):
+    """Argument parser with concise, stable CLI errors."""
+
+    def error(self, message: str) -> Never:
+        """Exit with one concise parser error and no usage dump."""
+        self.exit(2, f"{self.prog}: error: {message}\n")
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the command line argument parser."""
-    parser = argparse.ArgumentParser(
+    parser = CliArgumentParser(
         prog="smart-file-organizer",
-        description="Organize files through safe command groups.",
+        description="Preview or apply deterministic file organization plans.",
+        epilog=(
+            "Canonical usage: smart-file-organizer plan [options] [sources]. "
+            "Direct planning options without the 'plan' command remain "
+            "available as compatibility syntax."
+        ),
     )
     parser.add_argument(
         "--version",
@@ -64,8 +78,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     plan_parser = subparsers.add_parser(
         "plan",
-        help="Build or apply a file organization plan.",
-        description="Build a file organization plan without moving files by default.",
+        help="Preview or apply a file organization plan.",
+        description=(
+            "Preview a file organization plan without moving files by default. "
+            "Pass --apply only after reviewing the plan."
+        ),
     )
     _add_plan_arguments(plan_parser)
 
@@ -330,6 +347,11 @@ def main(argv: Sequence[str] | None = None) -> None:
         "event=plan_built count=%s inspect_content=%s", len(plan), args.inspect_content
     )
 
+    if not plan and not args.apply and args.format == "text":
+        sys.stdout.write("No files found.\n")
+        logger.info("event=plan_empty")
+        return
+
     conflicts = find_destination_conflicts(plan)
 
     if args.conflict_strategy == "rename":
@@ -365,7 +387,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             parser.error(str(error))
         except ManifestWriteError as error:
             logger.error("event=manifest_write_failed")
-            parser.exit(1, f"error: {error}\n")
+            parser.exit(1, f"{parser.prog}: error: {error}\n")
 
         summary = format_execution_summary(result)
 
