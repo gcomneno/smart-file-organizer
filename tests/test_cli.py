@@ -1,8 +1,10 @@
+import json
 from pathlib import Path
 
 import pytest
 
 import smart_file_organizer.cli as cli_module
+import smart_file_organizer.execution as execution_module
 from smart_file_organizer.cli import (
     build_parser,
     collect_sources,
@@ -449,7 +451,11 @@ def test_main_applies_organization_plan(
 
     captured = capsys.readouterr()
 
-    assert captured.out == ""
+    output_lines = captured.out.splitlines()
+    assert output_lines[0] == "Apply result: completed=2 failed=0 unattempted=0"
+    assert output_lines[1].startswith("Manifest: ")
+    assert Path(output_lines[1].removeprefix("Manifest: ")).is_file()
+    assert captured.err == ""
     assert not photo.exists()
     assert not notes.exists()
     assert (target_root / "images" / "photo.jpg").read_text() == "fake image"
@@ -793,3 +799,72 @@ def test_main_allows_non_recursive_target_inside_scanned_source(
     assert captured.out == (f"{source} -> {target_root}/documents/inbox/notes.txt\n")
     assert captured.err == ""
     assert not target_root.exists()
+
+
+def test_main_reports_partial_apply_with_durable_manifest(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    source_root = tmp_path / "source"
+    target_root = tmp_path / "organized"
+    source_root.mkdir()
+
+    first = source_root / "a.jpg"
+    second = source_root / "b.txt"
+    third = source_root / "c.py"
+
+    first.write_text("first")
+    second.write_text("second")
+    third.write_text("third")
+
+    real_move = execution_module.shutil.move
+    calls = 0
+
+    def fail_second_move(source: Path, destination: Path) -> Path | str:
+        nonlocal calls
+        calls += 1
+
+        if calls == 2:
+            raise PermissionError("synthetic permission failure")
+
+        return real_move(source, destination)
+
+    monkeypatch.setattr(execution_module.shutil, "move", fail_second_move)
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(
+            [
+                "--target",
+                str(target_root),
+                "--apply",
+                str(first),
+                str(second),
+                str(third),
+            ]
+        )
+
+    captured = capsys.readouterr()
+
+    assert exc_info.value.code == 1
+    assert captured.out == ""
+    assert "Traceback" not in captured.err
+
+    output_lines = captured.err.splitlines()
+    assert output_lines[0] == "Apply result: completed=1 failed=1 unattempted=1"
+    assert output_lines[1].startswith("Manifest: ")
+    assert output_lines[2].startswith("Failed move: ")
+
+    manifest_path = Path(output_lines[1].removeprefix("Manifest: "))
+    payload = json.loads(manifest_path.read_text())
+
+    assert payload["state"] == "failed"
+    assert [move["status"] for move in payload["moves"]] == [
+        "completed",
+        "failed",
+        "unattempted",
+    ]
+
+    assert not first.exists()
+    assert second.exists()
+    assert third.exists()

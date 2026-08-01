@@ -1,21 +1,15 @@
 """Move planning and execution helpers."""
 
-import shutil
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 from smart_file_organizer.classification import classify_path
-from smart_file_organizer.errors import (
-    DestinationConflictError,
-    DestinationExistsError,
-)
+from smart_file_organizer.errors import DestinationConflictError
 from smart_file_organizer.config import DEFAULT_FALLBACK_FOLDER
 from smart_file_organizer.models import PlannedMove, SemanticFolderRule
 from smart_file_organizer.path_validation import (
     validate_destination,
     validate_destination_folder,
-    validate_plan_destinations,
-    validate_source_files,
 )
 from smart_file_organizer.semantic_rules import infer_destination_folder
 
@@ -200,24 +194,3 @@ def resolve_destination_conflicts(plan: Iterable[PlannedMove]) -> list[PlannedMo
         )
 
     return resolved_plan
-
-
-def execute_plan(plan: Iterable[PlannedMove], target_root: Path) -> None:
-    """Execute a move plan safely."""
-    moves = list(plan)
-
-    if find_destination_conflicts(moves):
-        raise DestinationConflictError("plan contains destination conflicts")
-
-    validate_source_files(move.source for move in moves)
-    validate_plan_destinations(moves, target_root)
-
-    for planned_move in moves:
-        if planned_move.destination.exists():
-            raise DestinationExistsError(
-                f"destination already exists: {planned_move.destination}"
-            )
-
-    for planned_move in moves:
-        planned_move.destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(planned_move.source, planned_move.destination)
