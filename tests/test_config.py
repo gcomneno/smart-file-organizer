@@ -194,3 +194,21 @@ def test_parse_config_rejects_invalid_semantic_rules(
 def test_parse_config_raises_config_error_for_invalid_data() -> None:
     with pytest.raises(ConfigError, match="semantic_rules must be a list"):
         parse_config({"semantic_rules": "wrong"})
+
+
+@pytest.mark.parametrize(
+    "folder",
+    ["/absolute/folder", "documents/../escaped", "documents//inbox"],
+)
+@pytest.mark.parametrize("field", ["fallback", "rule"])
+def test_parse_config_rejects_unsafe_destination_folders(
+    folder: str, field: str
+) -> None:
+    raw_config: dict[str, object]
+    if field == "fallback":
+        raw_config = {"fallback_folder": folder}
+    else:
+        raw_config = {"semantic_rules": [{"folder": folder, "keywords": ["demo"]}]}
+
+    with pytest.raises(ConfigError, match="destination folder"):
+        parse_config(raw_config)

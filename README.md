@@ -96,6 +96,9 @@ uv run smart-file-organizer --from /path/to/source --recursive --target /path/to
 
 Only files are included; directories themselves are not moved.
 
+The target must differ from the scanned source directory. With `--recursive`,
+the target must also not be nested beneath the source directory.
+
 ### Dry run with content inspection
 
 ~~~bash
@@ -168,8 +171,14 @@ Content inspection is also opt-in. Document text is read only when `--inspect-co
 Before applying a plan, the program checks that:
 
 - no two source files would be moved to the same destination;
-- every source file exists;
+- every source exists and is a file;
+- every resolved destination remains beneath the resolved target root;
 - no destination file already exists.
+
+Explicit positional sources are validated before a preview is printed.
+Configured destination folders must be normalized relative paths and cannot
+contain `..` components. Resolved destination containment is checked both while
+planning and again immediately before applying a plan.
 
 If any of these checks fail, the command stops with an error.
 
