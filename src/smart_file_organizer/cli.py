@@ -29,6 +29,7 @@ from smart_file_organizer.errors import (
     UnsafePathError,
 )
 from smart_file_organizer.plan_output import render_plan_preview
+from smart_file_organizer.models import TaxonomyProfileName
 
 
 logger = logging.getLogger(__name__)
@@ -111,6 +112,11 @@ def _add_plan_arguments(parser: argparse.ArgumentParser) -> None:
             "Optional TOML configuration with semantic rules, "
             "precedence, and built-in rule disabling."
         ),
+    )
+    parser.add_argument(
+        "--profile",
+        choices=tuple(profile.value for profile in TaxonomyProfileName),
+        help="Built-in taxonomy profile. Overrides a configured profile.",
     )
     parser.add_argument(
         "--apply",
@@ -216,6 +222,9 @@ def main(argv: Sequence[str] | None = None) -> None:
         config_path=args.config,
         inspect_content=args.inspect_content,
         conflict_strategy=args.conflict_strategy,
+        profile=(
+            TaxonomyProfileName(args.profile) if args.profile is not None else None
+        ),
     )
 
     try:

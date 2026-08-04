@@ -25,6 +25,7 @@ from smart_file_organizer.models import (
     RulePrecedence,
     SemanticFolderRule,
     SemanticRuleDefinition,
+    TaxonomyProfileName,
 )
 from smart_file_organizer.planning import (
     build_organization_plan,
@@ -53,6 +54,7 @@ __all__ = [
     "RulePrecedence",
     "SemanticFolderRule",
     "SemanticRuleDefinition",
+    "TaxonomyProfileName",
     "build_organization_plan",
     "build_organization_plan_with_document_texts",
     "classify_path",

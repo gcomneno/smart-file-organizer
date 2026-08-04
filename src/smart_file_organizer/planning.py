@@ -10,6 +10,7 @@ from smart_file_organizer.models import (
     PlannedMove,
     RulePrecedence,
     SemanticFolderRule,
+    TaxonomyProfileName,
 )
 from smart_file_organizer.path_validation import (
     is_supported_source_file,
@@ -27,6 +28,7 @@ def plan_file(
     fallback_folder: str | None = DEFAULT_FALLBACK_FOLDER,
     rule_precedence: RulePrecedence = "builtins-first",
     disabled_builtin_rules: Iterable[str] = (),
+    taxonomy_profile: TaxonomyProfileName = TaxonomyProfileName.PERSONAL_IT,
 ) -> PlannedMove:
     """Build a move plan for one file without filesystem mutation."""
     return plan_file_with_document_text(
@@ -37,6 +39,7 @@ def plan_file(
         fallback_folder=fallback_folder,
         rule_precedence=rule_precedence,
         disabled_builtin_rules=disabled_builtin_rules,
+        taxonomy_profile=taxonomy_profile,
     )
 
 
@@ -49,6 +52,7 @@ def plan_file_with_document_text(
     fallback_folder: str | None = DEFAULT_FALLBACK_FOLDER,
     rule_precedence: RulePrecedence = "builtins-first",
     disabled_builtin_rules: Iterable[str] = (),
+    taxonomy_profile: TaxonomyProfileName = TaxonomyProfileName.PERSONAL_IT,
 ) -> PlannedMove:
     """Build a move plan and retain the classification decision."""
     category = classify_path(source)
@@ -59,6 +63,7 @@ def plan_file_with_document_text(
         fallback_folder=fallback_folder,
         rule_precedence=rule_precedence,
         disabled_builtin_rules=disabled_builtin_rules,
+        taxonomy_profile=taxonomy_profile,
     )
     destination_folder = validate_destination_folder(decision.folder)
     destination = target_root / destination_folder / source.name
@@ -80,6 +85,7 @@ def build_organization_plan(
     fallback_folder: str | None = DEFAULT_FALLBACK_FOLDER,
     rule_precedence: RulePrecedence = "builtins-first",
     disabled_builtin_rules: Iterable[str] = (),
+    taxonomy_profile: TaxonomyProfileName = TaxonomyProfileName.PERSONAL_IT,
 ) -> list[PlannedMove]:
     """Build move plans for multiple files."""
     rule_list = tuple(semantic_rules) if semantic_rules is not None else None
@@ -93,6 +99,7 @@ def build_organization_plan(
             fallback_folder=fallback_folder,
             rule_precedence=rule_precedence,
             disabled_builtin_rules=disabled_ids,
+            taxonomy_profile=taxonomy_profile,
         )
         for source in sources
     ]
@@ -107,6 +114,7 @@ def build_organization_plan_with_document_texts(
     fallback_folder: str | None = DEFAULT_FALLBACK_FOLDER,
     rule_precedence: RulePrecedence = "builtins-first",
     disabled_builtin_rules: Iterable[str] = (),
+    taxonomy_profile: TaxonomyProfileName = TaxonomyProfileName.PERSONAL_IT,
 ) -> list[PlannedMove]:
     """Build move plans using caller-provided document text."""
     rule_list = tuple(semantic_rules) if semantic_rules is not None else None
@@ -121,6 +129,7 @@ def build_organization_plan_with_document_texts(
             fallback_folder=fallback_folder,
             rule_precedence=rule_precedence,
             disabled_builtin_rules=disabled_ids,
+            taxonomy_profile=taxonomy_profile,
         )
         for source in sources
     ]

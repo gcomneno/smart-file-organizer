@@ -215,13 +215,15 @@ def test_cli_content_inspection_falls_back_without_leaking_report(
     payload = json.loads(captured.out)
 
     assert payload[0]["destination"] == str(target / "documents/inbox/diagnostic.txt")
-    assert payload[0]["classification"] == {
-        "folder": "documents/inbox",
-        "source": "fallback",
-        "rule_id": None,
-        "match_target": "fallback",
-        "reason": _FALLBACK_REASON,
-    }
+    classification = payload[0]["classification"]
+    assert classification["folder"] == "documents/inbox"
+    assert classification["source"] == "fallback"
+    assert classification["rule_id"] is None
+    assert classification["match_target"] == "fallback"
+    assert classification["reason"] == _FALLBACK_REASON
+    assert classification["outcome"] == "fallback"
+    assert classification["taxonomy_profile"] == "personal-it"
+    assert classification["candidates"] == []
     assert not target.exists()
     assert _FASTWEB_PATH_REPORT not in captured.out
     assert _FASTWEB_PATH_REPORT not in captured.err

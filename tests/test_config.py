@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -10,10 +11,46 @@ from smart_file_organizer.config import (
     load_config,
     parse_config,
 )
+from smart_file_organizer.models import TaxonomyProfileName
 
 
 def test_parse_config_returns_empty_config_for_empty_data() -> None:
     assert parse_config({}) == OrganizerConfig(fallback_folder="documents/inbox")
+
+
+def test_configuration_values_copy_caller_collections() -> None:
+    keywords = ["demo"]
+    patterns = [r"demo"]
+    rules = [
+        SemanticRule(
+            "documents/demo",
+            cast(tuple[str, ...], keywords),
+            cast(tuple[str, ...], patterns),
+        )
+    ]
+    disabled = ["builtin:documents/demo"]
+    config = OrganizerConfig(
+        semantic_rules=cast(tuple[SemanticRule, ...], rules),
+        disabled_builtin_rules=cast(tuple[str, ...], disabled),
+    )
+    keywords.clear()
+    patterns.clear()
+    rules.clear()
+    disabled.clear()
+
+    assert config.semantic_rules[0].keywords == ("demo",)
+    assert config.semantic_rules[0].patterns == (r"demo",)
+    assert config.disabled_builtin_rules == ("builtin:documents/demo",)
+
+
+def test_parse_config_reads_and_validates_taxonomy_profile() -> None:
+    assert parse_config({"profile": "minimal"}).taxonomy_profile is (
+        TaxonomyProfileName.MINIMAL
+    )
+    with pytest.raises(ConfigError, match="profile must be"):
+        parse_config({"profile": "unknown"})
+    with pytest.raises(ConfigError, match="unknown configuration key"):
+        parse_config({"unexpected": True})
 
 
 def test_parse_config_reads_semantic_rules() -> None:

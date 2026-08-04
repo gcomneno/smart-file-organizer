@@ -39,13 +39,12 @@ class DocumentInspectionStatus(StrEnum):
 
 @dataclass(frozen=True)
 class DocumentInspectionResult:
-    """Safe content-inspection result without exposed document contents."""
+    """Internal transient inspection result; text must not cross planning."""
 
     path: Path
     status: DocumentInspectionStatus
     text: str = ""
     error_type: str | None = None
-    error_message: str | None = None
 
 
 @contextmanager
@@ -126,7 +125,6 @@ def inspect_document_text(
             path=path,
             status=DocumentInspectionStatus.FAILED,
             error_type=type(error).__name__,
-            error_message=str(error),
         )
 
     if not text.strip():
