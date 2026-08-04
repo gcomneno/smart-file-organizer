@@ -96,6 +96,10 @@ class ExecutionResult:
     finished_at: datetime
     moves: tuple[MoveExecutionRecord, ...]
 
+    def __post_init__(self) -> None:
+        """Detach the result from a caller-owned move collection."""
+        object.__setattr__(self, "moves", tuple(self.moves))
+
     def count(self, status: MoveStatus) -> int:
         """Return the number of moves with the selected status."""
         return sum(record.status == status for record in self.moves)
