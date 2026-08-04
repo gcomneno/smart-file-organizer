@@ -20,7 +20,10 @@ from smart_file_organizer.models import FileCategory
 
 EXPECTED_EXPORTS = [
     "BrokenSourceSymlinkError",
+    "ClassificationCandidate",
     "ClassificationDecision",
+    "ClassificationEvidence",
+    "ClassificationOutcome",
     "ClassificationSource",
     "ConfigError",
     "ConflictStrategy",
@@ -28,9 +31,12 @@ EXPECTED_EXPORTS = [
     "DestinationExistsError",
     "DestinationParentError",
     "ExecutionResult",
+    "EvidenceSource",
+    "EvidenceStrength",
     "FileCategory",
     "InvalidSourceError",
     "ManifestWriteError",
+    "MatchMechanism",
     "MoveExecutionRecord",
     "MoveStatus",
     "OrganizationPlan",
@@ -39,6 +45,7 @@ EXPECTED_EXPORTS = [
     "PlannedMove",
     "SourceMissingError",
     "SourceSelectionError",
+    "TaxonomyProfileName",
     "UnsafePathError",
     "UnsupportedSourceSymlinkError",
     "apply_organization",
@@ -71,6 +78,8 @@ FORBIDDEN_EXPORTS = {
     "validate_plan_destinations",
     "__version__",
     "get_version",
+    "DocumentInspectionResult",
+    "DocumentInspectionStatus",
 }
 
 
@@ -91,6 +100,8 @@ def test_api_all_is_the_exact_ordered_public_contract() -> None:
     assert all(hasattr(api, name) for name in api.__all__)
     assert all(not name.startswith("_") for name in api.__all__)
     assert not FORBIDDEN_EXPORTS & set(api.__all__)
+    assert not hasattr(api, "DocumentInspectionResult")
+    assert not hasattr(api, "DocumentInspectionStatus")
 
 
 def test_package_root_remains_version_only() -> None:
@@ -240,6 +251,30 @@ def test_public_result_values_are_structured_and_immutable() -> None:
         assert is_dataclass(value)
         with pytest.raises(FrozenInstanceError):
             setattr(value, next(iter(value.__dataclass_fields__)), None)
+
+
+def test_public_evidence_models_are_slotted_frozen_and_copy_collections() -> None:
+    evidence = api.ClassificationEvidence(
+        rule_id="local:demo",
+        source=api.EvidenceSource.FILENAME,
+        mechanism=api.MatchMechanism.TOKEN,
+        strength=api.EvidenceStrength.STRONG,
+        reason="configured keyword matched filename",
+        matched_value="demo",
+    )
+    items = [evidence]
+    candidate = api.ClassificationCandidate(
+        folder=Path("documents/demo"),
+        rule_id="local:demo",
+        rule_origin=api.ClassificationSource.CONFIGURED_RULE,
+        aggregate_strength=api.EvidenceStrength.STRONG,
+        evidence=cast(tuple[api.ClassificationEvidence, ...], items),
+    )
+    items.clear()
+    assert candidate.evidence == (evidence,)
+    assert hasattr(candidate, "__slots__")
+    with pytest.raises(FrozenInstanceError):
+        setattr(candidate, "rule_id", "other")
 
 
 def test_public_api_plans_in_a_temporary_directory(tmp_path: Path) -> None:

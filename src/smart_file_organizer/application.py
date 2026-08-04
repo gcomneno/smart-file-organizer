@@ -22,6 +22,7 @@ from smart_file_organizer.models import (
     ExecutionResult,
     PlannedMove,
     SemanticRuleDefinition,
+    TaxonomyProfileName,
 )
 from smart_file_organizer.path_validation import (
     validate_plan_destinations,
@@ -64,6 +65,7 @@ class PlanOrganizationRequest:
     config_path: Path | None
     inspect_content: bool
     conflict_strategy: ConflictStrategy
+    profile: TaxonomyProfileName | None = None
 
     def __post_init__(self) -> None:
         """Detach the request from a caller-owned source collection."""
@@ -165,8 +167,15 @@ def _build_moves(
         config.semantic_rule_precedence if config is not None else "builtins-first"
     )
     disabled_builtin_rules = config.disabled_builtin_rules if config is not None else ()
+    profile = (
+        request.profile
+        or (config.taxonomy_profile if config is not None else None)
+        or TaxonomyProfileName.PERSONAL_IT
+    )
     uses_default_rule_policy = (
-        rule_precedence == "builtins-first" and not disabled_builtin_rules
+        rule_precedence == "builtins-first"
+        and not disabled_builtin_rules
+        and profile is TaxonomyProfileName.PERSONAL_IT
     )
 
     if request.inspect_content:
@@ -185,6 +194,7 @@ def _build_moves(
             fallback_folder=fallback_folder,
             rule_precedence=rule_precedence,
             disabled_builtin_rules=disabled_builtin_rules,
+            taxonomy_profile=profile,
             verbose=verbose,
         )
 
@@ -202,6 +212,7 @@ def _build_moves(
         fallback_folder=fallback_folder,
         rule_precedence=rule_precedence,
         disabled_builtin_rules=disabled_builtin_rules,
+        taxonomy_profile=profile,
     )
 
 

@@ -14,7 +14,12 @@ from smart_file_organizer.application import (
     plan_organization,
 )
 from smart_file_organizer.errors import DestinationExistsError, ManifestWriteError
-from smart_file_organizer.models import FileCategory, PlannedMove
+from smart_file_organizer.models import (
+    ConflictStrategy,
+    FileCategory,
+    PlannedMove,
+    TaxonomyProfileName,
+)
 
 
 def _request(
@@ -22,17 +27,49 @@ def _request(
     target_root: Path = Path("organized"),
     **overrides: object,
 ) -> PlanOrganizationRequest:
-    values: dict[str, object] = {
-        "explicit_sources": sources,
-        "source_root": None,
-        "recursive": False,
-        "target_root": target_root,
-        "config_path": None,
-        "inspect_content": False,
-        "conflict_strategy": "fail",
-    }
-    values.update(overrides)
-    return PlanOrganizationRequest(**values)  # type: ignore[arg-type]
+    remaining = dict(overrides)
+
+    request = PlanOrganizationRequest(
+        explicit_sources=cast(
+            tuple[Path, ...],
+            remaining.pop("explicit_sources", sources),
+        ),
+        source_root=cast(
+            Path | None,
+            remaining.pop("source_root", None),
+        ),
+        recursive=cast(
+            bool,
+            remaining.pop("recursive", False),
+        ),
+        target_root=cast(
+            Path,
+            remaining.pop("target_root", target_root),
+        ),
+        config_path=cast(
+            Path | None,
+            remaining.pop("config_path", None),
+        ),
+        inspect_content=cast(
+            bool,
+            remaining.pop("inspect_content", False),
+        ),
+        conflict_strategy=cast(
+            ConflictStrategy,
+            remaining.pop("conflict_strategy", "fail"),
+        ),
+        profile=cast(
+            TaxonomyProfileName | None,
+            remaining.pop("profile", None),
+        ),
+    )
+
+    if remaining:
+        raise AssertionError(
+            "unsupported request overrides: " + ", ".join(sorted(remaining))
+        )
+
+    return request
 
 
 def _move(source: Path, destination: Path) -> PlannedMove:

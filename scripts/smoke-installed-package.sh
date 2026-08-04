@@ -49,6 +49,17 @@ test "$DRY_RUN_OUTPUT" = "$SOURCE -> $DESTINATION"
 test -f "$SOURCE"
 test ! -e "$DESTINATION"
 
+"$CLI" plan --profile minimal --explain --format json \
+    --target "$TARGET_DIRECTORY" "$SOURCE" | "$VENV/bin/python" -c '
+import json
+import sys
+
+payload = json.load(sys.stdin)
+classification = payload[0]["classification"]
+assert classification["taxonomy_profile"] == "minimal"
+assert classification["outcome"] == "fallback"
+'
+
 "$CLI" plan --apply --target "$TARGET_DIRECTORY" "$SOURCE" >/dev/null
 test ! -e "$SOURCE"
 test -f "$DESTINATION"
@@ -86,7 +97,10 @@ for required_name in ("Homepage", "Repository", "Issues", "Changelog", "Releases
 
 expected_exports = [
     "BrokenSourceSymlinkError",
+    "ClassificationCandidate",
     "ClassificationDecision",
+    "ClassificationEvidence",
+    "ClassificationOutcome",
     "ClassificationSource",
     "ConfigError",
     "ConflictStrategy",
@@ -94,9 +108,12 @@ expected_exports = [
     "DestinationExistsError",
     "DestinationParentError",
     "ExecutionResult",
+    "EvidenceSource",
+    "EvidenceStrength",
     "FileCategory",
     "InvalidSourceError",
     "ManifestWriteError",
+    "MatchMechanism",
     "MoveExecutionRecord",
     "MoveStatus",
     "OrganizationPlan",
@@ -105,6 +122,7 @@ expected_exports = [
     "PlannedMove",
     "SourceMissingError",
     "SourceSelectionError",
+    "TaxonomyProfileName",
     "UnsafePathError",
     "UnsupportedSourceSymlinkError",
     "apply_organization",
@@ -120,9 +138,27 @@ assert resources.files("smart_file_organizer").joinpath("py.typed").is_file()
 
 with TemporaryDirectory() as temporary_directory:
     workspace = Path(temporary_directory)
+    semantic_source = workspace / "fastweb.txt"
     source = workspace / "source.txt"
     target = workspace / "target"
+    semantic_source.write_text("installed wheel semantic smoke", encoding="utf-8")
     source.write_text("installed wheel API smoke", encoding="utf-8")
+    semantic_plan = api.plan_organization(
+        api.PlanOrganizationRequest(
+            explicit_sources=(semantic_source,),
+            source_root=None,
+            recursive=False,
+            target_root=target,
+            config_path=None,
+            inspect_content=False,
+            conflict_strategy="fail",
+        )
+    )
+    semantic_decision = semantic_plan.moves[0].classification
+    assert semantic_decision is not None
+    assert semantic_decision.outcome is api.ClassificationOutcome.SELECTED
+    assert semantic_decision.selected_candidate is not None
+    assert semantic_decision.selected_candidate.evidence[0].source is api.EvidenceSource.FILENAME
     request = api.PlanOrganizationRequest(
         explicit_sources=(source,),
         source_root=None,
@@ -131,10 +167,13 @@ with TemporaryDirectory() as temporary_directory:
         config_path=None,
         inspect_content=False,
         conflict_strategy="fail",
+        profile=api.TaxonomyProfileName.MINIMAL,
     )
     plan = api.plan_organization(request)
     assert plan.moves[0].source == source
     assert plan.moves[0].classification is not None
+    assert plan.moves[0].classification.taxonomy_profile is api.TaxonomyProfileName.MINIMAL
+    assert plan.moves[0].classification.outcome is api.ClassificationOutcome.FALLBACK
     result = api.apply_organization(plan)
     assert result.successful
     assert result.manifest_path.is_file()

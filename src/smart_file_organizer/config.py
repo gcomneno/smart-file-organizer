@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from smart_file_organizer.errors import ConfigError
-from smart_file_organizer.models import RulePrecedence
+from smart_file_organizer.models import RulePrecedence, TaxonomyProfileName
 from smart_file_organizer.path_validation import validate_destination_folder
 
 
@@ -24,6 +24,11 @@ class SemanticRule:
     patterns: tuple[str, ...] = ()
     rule_id: str | None = None
 
+    def __post_init__(self) -> None:
+        """Detach configuration values from parser-owned collections."""
+        object.__setattr__(self, "keywords", tuple(self.keywords))
+        object.__setattr__(self, "patterns", tuple(self.patterns))
+
 
 @dataclass(frozen=True)
 class OrganizerConfig:
@@ -33,6 +38,16 @@ class OrganizerConfig:
     fallback_folder: str = DEFAULT_FALLBACK_FOLDER
     semantic_rule_precedence: RulePrecedence = "builtins-first"
     disabled_builtin_rules: tuple[str, ...] = ()
+    taxonomy_profile: TaxonomyProfileName | None = None
+
+    def __post_init__(self) -> None:
+        """Detach configuration results from parser-owned collections."""
+        object.__setattr__(self, "semantic_rules", tuple(self.semantic_rules))
+        object.__setattr__(
+            self,
+            "disabled_builtin_rules",
+            tuple(self.disabled_builtin_rules),
+        )
 
 
 def load_config(path: Path) -> OrganizerConfig:
@@ -43,6 +58,15 @@ def load_config(path: Path) -> OrganizerConfig:
 
 def parse_config(data: Mapping[str, Any]) -> OrganizerConfig:
     """Parse application configuration from raw TOML data."""
+    unknown_keys = set(data) - {
+        "semantic_rules",
+        "fallback_folder",
+        "semantic_rule_precedence",
+        "disabled_builtin_rules",
+        "profile",
+    }
+    if unknown_keys:
+        raise ConfigError("unknown configuration key: " + sorted(unknown_keys)[0])
     raw_rules = data.get("semantic_rules", [])
 
     if not isinstance(raw_rules, list):
@@ -61,6 +85,7 @@ def parse_config(data: Mapping[str, Any]) -> OrganizerConfig:
         fallback_folder=_parse_fallback_folder(data),
         semantic_rule_precedence=_parse_rule_precedence(data),
         disabled_builtin_rules=_parse_disabled_builtin_rules(data),
+        taxonomy_profile=_parse_taxonomy_profile(data),
     )
 
 
@@ -82,6 +107,21 @@ def _parse_rule_precedence(
         )
 
     return value
+
+
+def _parse_taxonomy_profile(
+    data: Mapping[str, Any],
+) -> TaxonomyProfileName | None:
+    """Parse an optional built-in taxonomy profile."""
+    value = data.get("profile")
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ConfigError("profile must be 'minimal' or 'personal-it'")
+    try:
+        return TaxonomyProfileName(value)
+    except ValueError as error:
+        raise ConfigError("profile must be 'minimal' or 'personal-it'") from error
 
 
 def _parse_disabled_builtin_rules(
@@ -138,6 +178,10 @@ def _parse_semantic_rule(data: object) -> SemanticRule:
     """Parse a semantic rule from raw TOML data."""
     if not isinstance(data, Mapping):
         raise ConfigError("semantic rule must be a table")
+
+    unknown_keys = set(data) - {"folder", "keywords", "patterns", "id"}
+    if unknown_keys:
+        raise ConfigError("unknown semantic rule key: " + sorted(unknown_keys)[0])
 
     folder = data.get("folder")
     keywords = data.get("keywords", [])

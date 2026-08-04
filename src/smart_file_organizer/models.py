@@ -38,6 +38,53 @@ class ClassificationSource(StrEnum):
     FALLBACK = "fallback"
 
 
+class EvidenceSource(StrEnum):
+    """A privacy-safe origin for one piece of classification evidence."""
+
+    FILENAME = "filename"
+    SOURCE_PATH = "source_path"
+    EXTRACTED_CONTENT = "extracted_content"
+    EXTENSION = "extension"
+    CONFIGURED_METADATA = "configured_metadata"
+
+
+class MatchMechanism(StrEnum):
+    """How a rule produced one item of evidence."""
+
+    EXACT_PHRASE = "exact_phrase"
+    TOKEN = "token"
+    REGEX = "regex"
+    EXTENSION = "extension"
+    SPECIAL_CASE = "special_case"
+    FALLBACK = "fallback"
+
+
+class EvidenceStrength(StrEnum):
+    """Discrete, ordered evidence strengths."""
+
+    WEAK = "weak"
+    SUPPORTING = "supporting"
+    STRONG = "strong"
+
+
+class ClassificationOutcome(StrEnum):
+    """The engine result before its destination is rendered into a plan."""
+
+    SELECTED = "selected"
+    AMBIGUOUS = "ambiguous"
+    ABSTAINED = "abstained"
+    EXTENSION = "extension"
+    SPECIAL_CASE = "special_case"
+    FALLBACK = "fallback"
+
+
+class TaxonomyProfileName(StrEnum):
+    """Supported built-in taxonomy profiles."""
+
+    MINIMAL = "minimal"
+    PERSONAL_IT = "personal-it"
+
+
 ClassificationMatchTarget = Literal[
     "path",
     "content",
@@ -50,7 +97,35 @@ RulePrecedence = Literal[
 ]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
+class ClassificationEvidence:
+    """One privacy-safe indication for a candidate destination."""
+
+    rule_id: str
+    source: EvidenceSource
+    mechanism: MatchMechanism
+    strength: EvidenceStrength
+    reason: str
+    matched_value: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ClassificationCandidate:
+    """A deterministically aggregated semantic or mechanical candidate."""
+
+    folder: Path
+    rule_id: str
+    rule_origin: ClassificationSource
+    aggregate_strength: EvidenceStrength
+    evidence: tuple[ClassificationEvidence, ...] = ()
+    taxonomy_priority: int | None = None
+
+    def __post_init__(self) -> None:
+        """Detach the candidate from caller-owned evidence collections."""
+        object.__setattr__(self, "evidence", tuple(self.evidence))
+
+
+@dataclass(frozen=True, slots=True)
 class ClassificationDecision:
     """Explain why one destination folder was selected."""
 
@@ -59,6 +134,24 @@ class ClassificationDecision:
     reason: str
     rule_id: str | None = None
     match_target: ClassificationMatchTarget | None = None
+    outcome: ClassificationOutcome = ClassificationOutcome.FALLBACK
+    taxonomy_profile: TaxonomyProfileName = TaxonomyProfileName.PERSONAL_IT
+    selected_candidate: ClassificationCandidate | None = None
+    candidates: tuple[ClassificationCandidate, ...] = ()
+
+    def __post_init__(self) -> None:
+        """Detach collections and retain a coherent legacy default outcome."""
+        object.__setattr__(self, "candidates", tuple(self.candidates))
+        if self.outcome is not ClassificationOutcome.FALLBACK:
+            return
+        source_outcomes = {
+            ClassificationSource.BUILTIN_RULE: ClassificationOutcome.SELECTED,
+            ClassificationSource.CONFIGURED_RULE: ClassificationOutcome.SELECTED,
+            ClassificationSource.EXTENSION: ClassificationOutcome.EXTENSION,
+            ClassificationSource.SPECIAL_CASE: ClassificationOutcome.SPECIAL_CASE,
+        }
+        if outcome := source_outcomes.get(self.source):
+            object.__setattr__(self, "outcome", outcome)
 
 
 @dataclass(frozen=True)
@@ -142,6 +235,11 @@ class SemanticRuleDefinition:
     keywords: tuple[str, ...] = ()
     patterns: tuple[str, ...] = ()
     rule_id: str | None = None
+
+    def __post_init__(self) -> None:
+        """Detach a rule from caller-owned indicator collections."""
+        object.__setattr__(self, "keywords", tuple(self.keywords))
+        object.__setattr__(self, "patterns", tuple(self.patterns))
 
 
 # Backward-compatible alias for keyword-only rules passed as tuples in tests.
