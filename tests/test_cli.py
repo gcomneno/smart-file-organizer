@@ -1,10 +1,16 @@
 import json
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
 
 import smart_file_organizer.cli as cli_module
 import smart_file_organizer.execution as execution_module
+from smart_file_organizer.application import (
+    OrganizationPlan,
+    OrganizationPlanConflictError,
+    PlanOrganizationRequest,
+)
 from smart_file_organizer.cli import (
     build_parser,
     collect_sources,
@@ -12,7 +18,7 @@ from smart_file_organizer.cli import (
     main,
 )
 from smart_file_organizer.core import FileCategory, PlannedMove
-from smart_file_organizer.errors import SourceSelectionError
+from smart_file_organizer.errors import ManifestWriteError, SourceSelectionError
 
 
 @pytest.fixture
@@ -61,39 +67,43 @@ def test_format_destination_conflicts() -> None:
     )
 
 
-def test_main_inspect_content_uses_content_aware_plan(
+def test_main_maps_inspect_content_request_and_renders_application_plan(
     monkeypatch: pytest.MonkeyPatch,
     capsys,
     explicit_source_files: None,
 ) -> None:
-    recorded_sources: list[Path] = []
-    recorded_target: Path | None = None
+    recorded_request: PlanOrganizationRequest | None = None
+    recorded_verbose: bool | None = None
+    recorded_source_collector: object | None = None
 
-    def fake_build_content_aware_plan(
-        sources,
-        target_root: Path,
+    def fake_plan_organization(
+        request,
         *,
-        semantic_rules=None,
-        fallback_folder=None,
         verbose=False,
-    ) -> list[PlannedMove]:
-        nonlocal recorded_target
-        recorded_sources.extend(sources)
-        recorded_target = target_root
+        _source_collector=None,
+    ) -> OrganizationPlan:
+        nonlocal recorded_request
+        nonlocal recorded_verbose
+        nonlocal recorded_source_collector
 
-        return [
-            PlannedMove(
-                source=Path("generic.pdf"),
-                destination=Path("organized/documents/taxes/generic.pdf"),
-                category=FileCategory.DOCUMENTS,
-            )
-        ]
+        recorded_request = request
+        recorded_verbose = verbose
+        recorded_source_collector = _source_collector
+        return OrganizationPlan(
+            Path("organized"),
+            (
+                PlannedMove(
+                    source=Path("generic.pdf"),
+                    destination=Path("organized/documents/taxes/generic.pdf"),
+                    category=FileCategory.DOCUMENTS,
+                ),
+            ),
+        )
 
     monkeypatch.setattr(
         cli_module,
-        "build_organization_plan_inspecting_content",
-        fake_build_content_aware_plan,
-        raising=False,
+        "plan_organization",
+        fake_plan_organization,
     )
 
     main(
@@ -107,9 +117,57 @@ def test_main_inspect_content_uses_content_aware_plan(
 
     captured = capsys.readouterr()
 
-    assert recorded_sources == [Path("generic.pdf")]
-    assert recorded_target == Path("organized")
+    assert recorded_request is not None
+    assert recorded_request.explicit_sources == (Path("generic.pdf"),)
+    assert recorded_request.target_root == Path("organized")
+    assert recorded_request.inspect_content is True
+    assert recorded_request.conflict_strategy == "fail"
+    assert recorded_verbose is False
+    assert recorded_source_collector is cli_module.collect_sources
     assert captured.out == ("generic.pdf -> organized/documents/taxes/generic.pdf\n")
+
+
+def test_main_preserves_collect_sources_compatibility_seam(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    explicit_source_files: None,
+) -> None:
+    original_collect_sources = cli_module.collect_sources
+    calls: list[tuple[Path | None, tuple[Path, ...], bool]] = []
+
+    def recording_collect_sources(
+        source_root: Path | None,
+        explicit_sources: Sequence[Path],
+        *,
+        recursive: bool = False,
+    ) -> list[Path]:
+        source_tuple = tuple(explicit_sources)
+        calls.append((source_root, source_tuple, recursive))
+
+        return original_collect_sources(
+            source_root,
+            source_tuple,
+            recursive=recursive,
+        )
+
+    monkeypatch.setattr(
+        cli_module,
+        "collect_sources",
+        recording_collect_sources,
+    )
+
+    main(["generic.pdf"])
+
+    assert calls == [
+        (
+            None,
+            (Path("generic.pdf"),),
+            False,
+        )
+    ]
+    assert capsys.readouterr().out == (
+        "generic.pdf -> organized/documents/inbox/generic.pdf\n"
+    )
 
 
 def test_main_prints_organization_plan_from_explicit_sources(
@@ -360,6 +418,43 @@ def test_main_rejects_destination_conflicts(
     assert "usage:" not in captured.err
 
 
+def test_main_formats_application_conflicts_at_cli_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    explicit_source_files: None,
+) -> None:
+    destination = Path("organized/images/photo.jpg")
+    conflicts = {
+        destination: (
+            PlannedMove(
+                source=Path("folder-a/photo.jpg"),
+                destination=destination,
+                category=FileCategory.IMAGES,
+            ),
+            PlannedMove(
+                source=Path("folder-b/photo.jpg"),
+                destination=destination,
+                category=FileCategory.IMAGES,
+            ),
+        )
+    }
+
+    def fail_planning(*_args, **_kwargs) -> OrganizationPlan:
+        raise OrganizationPlanConflictError(conflicts)
+
+    monkeypatch.setattr(cli_module, "plan_organization", fail_planning)
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(["photo.jpg"])
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 2
+    assert captured.err == (
+        "smart-file-organizer: error: destination conflicts detected:\n"
+        "- organized/images/photo.jpg: folder-a/photo.jpg, folder-b/photo.jpg\n"
+    )
+
+
 def test_main_verbose_logs_destination_conflict_event(
     capsys,
     explicit_source_files: None,
@@ -564,6 +659,27 @@ def test_main_apply_reports_execution_errors(
     assert destination.read_text() == "existing image"
 
 
+def test_main_maps_manifest_write_error_to_status_one(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    explicit_source_files: None,
+) -> None:
+    def fail_apply(_plan: OrganizationPlan) -> None:
+        raise ManifestWriteError("could not persist apply manifest")
+
+    monkeypatch.setattr(cli_module, "apply_organization", fail_apply)
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(["--apply", "photo.jpg"])
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 1
+    assert captured.out == ""
+    assert captured.err == (
+        "smart-file-organizer: error: could not persist apply manifest\n"
+    )
+
+
 def test_main_uses_configured_semantic_rules(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -749,9 +865,74 @@ def test_main_verbose_logs_high_level_events(
     captured = capsys.readouterr()
 
     assert "event=cli_started inspect_content=False apply=False" in captured.err
-    assert "event=sources_collected count=1" in captured.err
+    assert (
+        "INFO smart_file_organizer.application event=sources_collected count=1"
+    ) in captured.err
     assert "event=plan_built count=1 inspect_content=False" in captured.err
     assert "photo.jpg" not in captured.err
+
+
+def test_main_verbose_logs_loaded_configuration(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    explicit_source_files: None,
+) -> None:
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(
+        """
+[[semantic_rules]]
+folder = "documents/custom"
+keywords = ["synthetic"]
+""",
+        encoding="utf-8",
+    )
+
+    main(
+        [
+            "--verbose",
+            "--config",
+            str(config_file),
+            "notes.txt",
+        ]
+    )
+
+    captured = capsys.readouterr()
+
+    assert (
+        "INFO smart_file_organizer.application event=config_loaded semantic_rules=1"
+    ) in captured.err
+
+
+def test_main_verbose_logs_conflict_resolution(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    first_parent = tmp_path / "first"
+    second_parent = tmp_path / "second"
+    first_parent.mkdir()
+    second_parent.mkdir()
+
+    first = first_parent / "photo.jpg"
+    second = second_parent / "photo.jpg"
+    first.write_text("first", encoding="utf-8")
+    second.write_text("second", encoding="utf-8")
+
+    main(
+        [
+            "--verbose",
+            "--conflict-strategy",
+            "rename",
+            str(first),
+            str(second),
+        ]
+    )
+
+    captured = capsys.readouterr()
+
+    assert (
+        "INFO smart_file_organizer.application "
+        "event=destination_conflicts_resolving count=1"
+    ) in captured.err
 
 
 @pytest.mark.parametrize(
