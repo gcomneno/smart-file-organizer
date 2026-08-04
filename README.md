@@ -98,6 +98,62 @@ Run the test suite:
 uv run python -m pytest
 ~~~
 
+## Provisional Python API
+
+The supported Python import path is `smart_file_organizer.api`. This Python API
+is provisional before 1.0 and until it has survived at least one release cycle.
+The CLI remains the most stable user-facing contract; the Python API is
+separately governed. Manifest schema compatibility is independently versioned.
+
+Internals, including `core.py` and implementation modules, may change without
+compatibility guarantees. Configure planning with
+`PlanOrganizationRequest.config_path`. Always inspect an `OrganizationPlan`
+before explicitly calling `apply_organization`.
+
+The normative export set is `smart_file_organizer.api.__all__` and is protected
+by contract tests. The installed package includes a `py.typed` marker for its
+inline type annotations. Controlled planning and apply errors are exported from
+the same API module so callers do not need to import implementation modules.
+
+<!-- python-api-example:start -->
+~~~python
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+from smart_file_organizer.api import (
+    PlanOrganizationRequest,
+    apply_organization,
+    plan_organization,
+)
+
+
+with TemporaryDirectory() as temporary_directory:
+    workspace = Path(temporary_directory)
+    source = workspace / "notes.txt"
+    target = workspace / "organized"
+    source.write_text("A temporary note.", encoding="utf-8")
+
+    request = PlanOrganizationRequest(
+        explicit_sources=(source,),
+        source_root=None,
+        recursive=False,
+        target_root=target,
+        config_path=None,
+        inspect_content=False,
+        conflict_strategy="fail",
+    )
+    plan = plan_organization(request)
+
+    move = plan.moves[0]
+    assert move.classification is not None
+    print(move.source, move.destination, move.classification.folder)
+
+    result = apply_organization(plan)
+    assert result.successful
+    assert result.manifest_path.is_file()
+~~~
+<!-- python-api-example:end -->
+
 Run formatting and linting checks:
 
 ~~~bash
@@ -657,6 +713,7 @@ These limitations are intentional for now. The project is being built step by st
 ~~~text
 src/smart_file_organizer/
 ├── app_logging.py
+├── api.py
 ├── classification.py
 ├── cli.py
 ├── config.py
@@ -671,6 +728,7 @@ src/smart_file_organizer/
 
 tests/
 ├── test_cli.py
+├── test_api.py
 ├── test_config.py
 ├── test_content_planning.py
 ├── test_core.py
@@ -678,7 +736,8 @@ tests/
 └── test_plan_output.py
 ~~~
 
-`core.py` keeps compatibility exports for the original public core imports.
+`api.py` is the provisional supported Python API. `core.py` retains historical
+compatibility exports but is not covered by the API stability promise.
 
 `models.py` contains shared domain models and type aliases.
 

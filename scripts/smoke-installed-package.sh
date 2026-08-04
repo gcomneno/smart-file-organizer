@@ -19,6 +19,9 @@ TARGET_DIRECTORY="$WORK_DIRECTORY/organized"
 mkdir -p "$SOURCE_DIRECTORY"
 
 export UV_NO_PROGRESS=1
+unset PYTHONPATH
+export PYTHONNOUSERSITE=1
+
 uv python install "$PYTHON_SELECTOR"
 uv venv --python "$PYTHON_SELECTOR" "$VENV"
 uv pip install --python "$VENV/bin/python" "$WHEEL_PATH"
@@ -57,7 +60,21 @@ MANIFEST="$(
 test -n "$MANIFEST"
 
 "$VENV/bin/python" - <<'PY'
-from importlib import metadata
+from importlib import metadata, resources
+from pathlib import Path
+import sys
+from tempfile import TemporaryDirectory
+
+import smart_file_organizer
+import smart_file_organizer.api as api
+from smart_file_organizer.api import *  # noqa: F403
+
+api_path = Path(api.__file__).resolve()
+virtual_environment = Path(sys.prefix).resolve()
+assert api_path.is_relative_to(virtual_environment), (
+    api_path,
+    virtual_environment,
+)
 
 distribution = metadata.distribution("smart-file-organizer")
 package_metadata = distribution.metadata
@@ -66,6 +83,63 @@ assert package_metadata["License-Expression"] == "MIT"
 project_urls = package_metadata.get_all("Project-URL") or []
 for required_name in ("Homepage", "Repository", "Issues", "Changelog", "Releases"):
     assert any(value.startswith(f"{required_name},") for value in project_urls)
+
+expected_exports = [
+    "BrokenSourceSymlinkError",
+    "ClassificationDecision",
+    "ClassificationSource",
+    "ConfigError",
+    "ConflictStrategy",
+    "DestinationConflictError",
+    "DestinationExistsError",
+    "DestinationParentError",
+    "ExecutionResult",
+    "FileCategory",
+    "InvalidSourceError",
+    "ManifestWriteError",
+    "MoveExecutionRecord",
+    "MoveStatus",
+    "OrganizationPlan",
+    "OrganizationPlanConflictError",
+    "PlanOrganizationRequest",
+    "PlannedMove",
+    "SourceMissingError",
+    "SourceSelectionError",
+    "UnsafePathError",
+    "UnsupportedSourceSymlinkError",
+    "apply_organization",
+    "plan_organization",
+]
+assert api.__all__ == expected_exports
+for name in api.__all__:
+    getattr(api, name)
+    assert name in globals()
+assert "smart_file_organizer.cli" not in sys.modules
+assert smart_file_organizer.__all__ == ["__version__", "get_version"]
+assert resources.files("smart_file_organizer").joinpath("py.typed").is_file()
+
+with TemporaryDirectory() as temporary_directory:
+    workspace = Path(temporary_directory)
+    source = workspace / "source.txt"
+    target = workspace / "target"
+    source.write_text("installed wheel API smoke", encoding="utf-8")
+    request = api.PlanOrganizationRequest(
+        explicit_sources=(source,),
+        source_root=None,
+        recursive=False,
+        target_root=target,
+        config_path=None,
+        inspect_content=False,
+        conflict_strategy="fail",
+    )
+    plan = api.plan_organization(request)
+    assert plan.moves[0].source == source
+    assert plan.moves[0].classification is not None
+    result = api.apply_organization(plan)
+    assert result.successful
+    assert result.manifest_path.is_file()
+    assert (target / "documents/inbox/source.txt").is_file()
+    assert not source.exists()
 PY
 
 printf 'Installed smoke test passed: Python %s, package %s\n' \
