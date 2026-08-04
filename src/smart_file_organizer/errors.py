@@ -2,7 +2,7 @@
 
 
 class SourceSelectionError(ValueError):
-    """Raised when CLI source selection is invalid."""
+    """Raised when planning source selection is invalid."""
 
 
 class ConfigError(ValueError):

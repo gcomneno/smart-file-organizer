@@ -1,7 +1,12 @@
-"""Compatibility exports for core file organization logic."""
+"""Legacy compatibility exports for historical core imports.
+
+This module is retained for historical compatibility. The supported Python API
+is :mod:`smart_file_organizer.api`; this module is not covered by that API's
+stability promise. Callers should migrate to ``api.py`` for supported planning
+and apply workflows.
+"""
 
 from smart_file_organizer.classification import (
-    _EXTENSION_CATEGORIES,
     classify_path,
 )
 from smart_file_organizer.execution import (
@@ -31,11 +36,6 @@ from smart_file_organizer.planning import (
     resolve_destination_conflicts,
 )
 from smart_file_organizer.semantic_rules import (
-    _SEMANTIC_FOLDER_RULES,
-    _match_semantic_folder,
-    _normalize_search_text,
-    _normalize_semantic_rules,
-    _path_search_text,
     infer_destination,
     infer_destination_folder,
 )
@@ -53,12 +53,6 @@ __all__ = [
     "RulePrecedence",
     "SemanticFolderRule",
     "SemanticRuleDefinition",
-    "_EXTENSION_CATEGORIES",
-    "_SEMANTIC_FOLDER_RULES",
-    "_match_semantic_folder",
-    "_normalize_search_text",
-    "_normalize_semantic_rules",
-    "_path_search_text",
     "build_organization_plan",
     "build_organization_plan_with_document_texts",
     "classify_path",

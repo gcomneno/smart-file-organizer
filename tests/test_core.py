@@ -6,8 +6,6 @@ from smart_file_organizer.core import (
     FileCategory,
     PlannedMove,
     SemanticRuleDefinition,
-    _SEMANTIC_FOLDER_RULES,
-    _normalize_semantic_rules,
     build_organization_plan,
     build_organization_plan_with_document_texts,
     classify_path,
@@ -18,6 +16,10 @@ from smart_file_organizer.core import (
     plan_file,
     plan_file_with_document_text,
     resolve_destination_conflicts,
+)
+from smart_file_organizer.semantic_rules import (
+    _SEMANTIC_FOLDER_RULES,
+    _normalize_semantic_rules,
 )
 from smart_file_organizer.errors import (
     DestinationConflictError,
