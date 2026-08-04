@@ -252,13 +252,17 @@ def test_explained_json_preview_contains_classification_object() -> None:
         )
     )
 
-    assert payload[0]["classification"] == {
-        "folder": "documents/taxes",
-        "source": "built_in_rule",
-        "rule_id": "builtin:documents/taxes",
-        "match_target": "path",
-        "reason": ("builtin:documents/taxes matched keyword 'cu2026' in path"),
-    }
+    classification = payload[0]["classification"]
+    assert classification["folder"] == "documents/taxes"
+    assert classification["source"] == "built_in_rule"
+    assert classification["rule_id"] == "builtin:documents/taxes"
+    assert classification["match_target"] == "path"
+    assert classification["reason"] == (
+        "builtin:documents/taxes matched keyword 'cu2026' in path"
+    )
+    assert classification["outcome"] == "selected"
+    assert classification["taxonomy_profile"] == "personal-it"
+    assert classification["selected_candidate"]["evidence"]
 
 
 def test_cli_configured_first_override_is_explainable(
@@ -304,6 +308,37 @@ keywords = ["cu2026"]
     )
     assert payload[0]["classification"]["rule_id"] == ("local:tax-archive")
     assert payload[0]["classification"]["source"] == ("configured_rule")
+
+
+def test_cli_profile_overrides_configured_profile(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    source = tmp_path / "fastweb.pdf"
+    target = tmp_path / "organized"
+    config = tmp_path / "organizer.toml"
+    source.write_bytes(b"synthetic")
+    config.write_text('profile = "minimal"\n', encoding="utf-8")
+
+    main(
+        [
+            "--config",
+            str(config),
+            "--profile",
+            "personal-it",
+            "--target",
+            str(target),
+            "--format",
+            "json",
+            "--explain",
+            str(source),
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    classification = payload[0]["classification"]
+    assert classification["taxonomy_profile"] == "personal-it"
+    assert classification["rule_id"] == "builtin:documents/utilities/fastweb"
 
 
 def test_cli_can_disable_applicable_builtin_rule(

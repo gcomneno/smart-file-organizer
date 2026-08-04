@@ -78,7 +78,7 @@ def test_inspection_contains_unreadable_pdf_failure(
 
     assert result.status == DocumentInspectionStatus.FAILED
     assert result.error_type == "PermissionError"
-    assert "synthetic unreadable path" in (result.error_message or "")
+    assert not hasattr(result, "error_message")
 
 
 def test_inspection_marks_image_only_pdf_as_no_text(
@@ -136,7 +136,6 @@ def test_cli_warns_and_uses_filename_fallback_for_reader_failures(
             path=path,
             status=DocumentInspectionStatus.FAILED,
             error_type=error_type,
-            error_message="TOP SECRET EXTRACTED CONTENT",
         )
 
     monkeypatch.setattr(
@@ -211,7 +210,6 @@ def test_verbose_failure_logs_error_class_but_not_contents(
             path=path,
             status=DocumentInspectionStatus.FAILED,
             error_type="SyntheticPdfError",
-            error_message="TOP SECRET EXTRACTED CONTENT",
         )
 
     monkeypatch.setattr(

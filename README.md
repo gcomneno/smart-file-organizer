@@ -121,7 +121,10 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from smart_file_organizer.api import (
+    ClassificationOutcome,
+    EvidenceSource,
     PlanOrganizationRequest,
+    TaxonomyProfileName,
     apply_organization,
     plan_organization,
 )
@@ -129,7 +132,7 @@ from smart_file_organizer.api import (
 
 with TemporaryDirectory() as temporary_directory:
     workspace = Path(temporary_directory)
-    source = workspace / "notes.txt"
+    source = workspace / "fastweb-note.txt"
     target = workspace / "organized"
     source.write_text("A temporary note.", encoding="utf-8")
 
@@ -141,11 +144,20 @@ with TemporaryDirectory() as temporary_directory:
         config_path=None,
         inspect_content=False,
         conflict_strategy="fail",
+        profile=TaxonomyProfileName.PERSONAL_IT,
     )
     plan = plan_organization(request)
 
     move = plan.moves[0]
     assert move.classification is not None
+    assert move.classification.outcome is ClassificationOutcome.SELECTED
+    assert move.classification.taxonomy_profile is TaxonomyProfileName.PERSONAL_IT
+    assert move.classification.selected_candidate is not None
+    assert move.classification.candidates == (move.classification.selected_candidate,)
+    assert (
+        move.classification.selected_candidate.evidence[0].source
+        is EvidenceSource.FILENAME
+    )
     print(move.source, move.destination, move.classification.folder)
 
     result = apply_organization(plan)
@@ -525,7 +537,9 @@ folder = "documents/demo-dated-reports"
 patterns = ["\\d{8} demo report \\d+"]
 ~~~
 
-Each rule must define `keywords`, `patterns`, or both. Regex patterns apply to file paths during filename matching. They do not apply to `--inspect-content` text matching in this version.
+Each rule must define `keywords`, `patterns`, or both. Regex patterns apply to
+normalized filename/source-path and inspected-content matching; content regex
+matches are supporting evidence rather than a standalone strong selection.
 
 Single-word keywords match as whole tokens in normalized path text, so short acronyms such as `adi` do not match inside unrelated words like `paradiso`. Multi-word phrases still use substring matching because they are already specific enough.
 
@@ -555,15 +569,47 @@ conventions.
 
 ### Deterministic precedence
 
-Classification follows this order:
+Semantic classification gathers every meaningful candidate before selecting a
+destination. Evidence has three discrete strengths: `weak`, `supporting`, and
+`strong`; it never uses floating-point confidence. Filename and source-path
+signals are strong. An exact multi-word content phrase is strong, one content
+token is weak, two distinct content indicators for one candidate combine to
+strong, and a content regex is supporting. Duplicate or overlapping indicators
+are counted once.
 
-1. semantic path rules, including filename and parent-directory components;
-2. ebook extension special cases for EPUB and AZW3;
-3. ordinary extension categories for non-document files;
-4. inspected content rules for documents when `--inspect-content` is enabled;
-5. the configured document fallback folder.
+Candidates are ranked deterministically by:
 
-Within the semantic path and content stages, rule ordering is controlled by:
+1. aggregate evidence strength;
+2. configured-versus-built-in precedence tier;
+3. presence of descriptive filename/source-path evidence;
+4. explicit reviewed taxonomy priority, when the profile supplies one;
+5. evidence-source diversity;
+6. distinct evidence count;
+7. stable rule ID and destination only for deterministic ordering.
+
+Taxonomy priority resolves reviewed `personal-it` built-in overlaps. It is not
+generic confidence and does not resolve equal configured candidates. Equal
+strong candidates in the same precedence tier and different folders are
+`ambiguous`; only weak/supporting semantic candidates are `abstained`. Both
+route to the fallback without dropping their candidate graph. Clear semantic
+candidates are `selected`; the remaining outcomes are `extension`,
+`special_case`, and `fallback`.
+
+Extracted text is never retained in plans, logs, explanations, or manifests.
+Routing lines and whole absolute filename references in extracted text are not
+descriptive evidence. Explain output can include configured keywords or regex
+patterns, but never arbitrary matched document text or excerpts.
+
+The `personal-it` profile is the compatibility default and contains the current
+opinionated built-ins. The `minimal` profile contains no personal semantic rules:
+it conservatively applies configured rules, extension categories, special cases,
+and fallback. Choose a profile with `--profile minimal` or
+`--profile personal-it`, `profile = "minimal"` in TOML, or
+`PlanOrganizationRequest(profile=TaxonomyProfileName.MINIMAL)`. Explicit
+CLI/Python selection wins over configuration, which wins over the default.
+
+Configured rules layer over either profile. Their precedence tier is controlled
+by:
 
 ```toml
 semantic_rule_precedence = "builtins-first"
@@ -593,8 +639,9 @@ folder = "private/tax-archive"
 keywords = ["cu2026", "certificazione unica"]
 ```
 
-The `id` field is optional. Rules without one receive deterministic runtime IDs
-such as `configured:1`. Explicit configured IDs must be unique and cannot use
+The `id` field is optional. Rules without one receive deterministic IDs derived
+from their normalized definition, so reordering equivalent rules cannot change
+an equivalent decision. Explicit configured IDs must be unique and cannot use
 the reserved `builtin:` prefix.
 
 ### Disabling built-in rules
@@ -632,16 +679,17 @@ across versions in which a built-in rule may not exist.
 
 ### Explaining a classification
 
-Default previews remain unchanged. Add `--explain` to include the selected
-classification source, rule ID, match target, and reason:
+Default previews remain unchanged. Add `--explain` to include the effective
+profile, outcome, selected candidate, competing candidates, and privacy-safe
+evidence (source, mechanism, strength, rule ID, and reason):
 
 ```bash
 uv run smart-file-organizer plan   --config smart-file-organizer.toml   --explain   CU2026_PERSON_A.pdf
 ```
 
 JSON explanations are available by combining `--explain` with `--format json`.
-The additional `classification` object identifies whether the decision came
-from a built-in rule, configured rule, extension, special case, or fallback.
+The additional `classification` object represents ambiguity and abstention as
+well as selected semantic, extension, special-case, and fallback outcomes.
 
 `--explain` affects dry-run previews only. Apply summaries and durable recovery
 manifests retain their existing format.
@@ -720,11 +768,13 @@ src/smart_file_organizer/
 ├── content_planning.py
 ├── core.py
 ├── document_text.py
+├── evidence.py
 ├── errors.py
 ├── models.py
 ├── plan_output.py
 ├── planning.py
-└── semantic_rules.py
+├── semantic_rules.py
+└── taxonomy.py
 
 tests/
 ├── test_cli.py

@@ -4,15 +4,37 @@ import json
 from collections.abc import Iterable
 from typing import Literal
 
-from smart_file_organizer.models import PlannedMove
+from smart_file_organizer.models import ClassificationCandidate, PlannedMove
 
 
 OutputFormat = Literal["text", "json"]
 
 
+def _candidate_payload(candidate: ClassificationCandidate) -> dict[str, object]:
+    """Return one deterministic, privacy-safe candidate graph."""
+    return {
+        "folder": str(candidate.folder),
+        "rule_id": candidate.rule_id,
+        "rule_origin": candidate.rule_origin.value,
+        "aggregate_strength": candidate.aggregate_strength.value,
+        "taxonomy_priority": candidate.taxonomy_priority,
+        "evidence": [
+            {
+                "rule_id": evidence.rule_id,
+                "source": evidence.source.value,
+                "mechanism": evidence.mechanism.value,
+                "strength": evidence.strength.value,
+                "reason": evidence.reason,
+                "matched_value": evidence.matched_value,
+            }
+            for evidence in candidate.evidence
+        ],
+    }
+
+
 def _classification_payload(
     move: PlannedMove,
-) -> dict[str, str | None] | None:
+) -> dict[str, object] | None:
     """Return serializable classification evidence."""
     decision = move.classification
 
@@ -25,6 +47,16 @@ def _classification_payload(
         "rule_id": decision.rule_id,
         "match_target": decision.match_target,
         "reason": decision.reason,
+        "outcome": decision.outcome.value,
+        "taxonomy_profile": decision.taxonomy_profile.value,
+        "selected_candidate": (
+            _candidate_payload(decision.selected_candidate)
+            if decision.selected_candidate is not None
+            else None
+        ),
+        "candidates": [
+            _candidate_payload(candidate) for candidate in decision.candidates
+        ],
     }
 
 
@@ -47,12 +79,48 @@ def format_planned_move(
     rule_text = decision.rule_id if decision.rule_id is not None else "-"
     target_text = decision.match_target if decision.match_target is not None else "-"
 
+    candidate_text = (
+        ", ".join(_candidate_text(candidate) for candidate in decision.candidates)
+        or "-"
+    )
+    selected_text = (
+        _candidate_text(decision.selected_candidate)
+        if decision.selected_candidate is not None
+        else "-"
+    )
     return (
         f"{line} "
         f"[source={decision.source.value} "
         f"rule={rule_text} "
         f"target={target_text} "
+        f"profile={decision.taxonomy_profile.value} "
+        f"outcome={decision.outcome.value} "
+        f"selected={selected_text} "
+        f"candidates={candidate_text} "
         f"reason={decision.reason}]"
+    )
+
+
+def _candidate_text(candidate: ClassificationCandidate) -> str:
+    """Render every privacy-safe evidence detail for one explain candidate."""
+    priority = (
+        str(candidate.taxonomy_priority)
+        if candidate.taxonomy_priority is not None
+        else "-"
+    )
+    evidence = (
+        ",".join(
+            (
+                f"{item.source.value}/{item.mechanism.value}/"
+                f"{item.strength.value}/{item.matched_value!r}"
+            )
+            for item in candidate.evidence
+        )
+        or "-"
+    )
+    return (
+        f"{candidate.rule_id}:{candidate.folder}:{candidate.rule_origin.value}:"
+        f"{candidate.aggregate_strength.value}:priority={priority}:evidence=[{evidence}]"
     )
 
 

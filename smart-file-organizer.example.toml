@@ -3,6 +3,10 @@
 # when local rules must override applicable built-ins.
 semantic_rule_precedence = "builtins-first"
 
+# Optional: "personal-it" is the compatibility default. "minimal" keeps
+# only extension, special-case, and fallback organization.
+# profile = "minimal"
+
 # Disable selected built-ins by their stable IDs.
 disabled_builtin_rules = []
 
