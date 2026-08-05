@@ -4,6 +4,45 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-05
+
+### Added
+
+- public application services and a supported Python API for planning,
+  application, manifest inspection, verification, and recovery planning;
+- deterministic explainable classification evidence with selected, ambiguous,
+  abstained, extension, and fallback outcomes;
+- built-in `personal-it` and conservative `minimal` taxonomy profiles;
+- privacy-safe `--explain` output in text and JSON planning formats;
+- schema-v1 manifest loading, strict validation, deterministic listing, and
+  reconciliation with current filesystem state;
+- non-mutating `recover plan` operations with explicit proposals, refusals,
+  already-restored, no-action, and unsafe dispositions;
+- `manifest show`, `manifest list`, `manifest verify`, and `recover plan`
+  command-line operations;
+- an architecture decision record for the evolution into a reusable,
+  explainable application platform.
+
+### Changed
+
+- command-line orchestration now delegates to reusable application services;
+- manifest serialization and validation share one schema-v1 contract while
+  preserving the established atomic writer and partial-failure evidence;
+- semantic classification now uses deterministic candidate aggregation,
+  precedence, tie handling, and conservative abstention;
+- installed-package smoke coverage exercises the public API and manifest
+  commands on Python 3.11 and Python 3.12.
+
+### Security
+
+- reject duplicate JSON keys, embedded-NUL paths, contradictory manifest
+  states, unsafe containment, and unsupported schema data;
+- resolve only the designated target-root alias while rejecting symlinks
+  inside the manifest store;
+- keep verification and recovery planning read-only and refuse ambiguous or
+  unsafe reverse operations.
+
+
 ## [0.4.2] - 2026-08-01
 
 ### Fixed
@@ -48,7 +87,8 @@ All notable changes to this project are documented in this file.
 - Ruff now targets the minimum supported Python version, Python 3.11;
 - CI separates quality, compatibility, and installed-package checks.
 
-[Unreleased]: https://github.com/gcomneno/smart-file-organizer/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/gcomneno/smart-file-organizer/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/gcomneno/smart-file-organizer/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/gcomneno/smart-file-organizer/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/gcomneno/smart-file-organizer/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/gcomneno/smart-file-organizer/releases/tag/v0.4.0
