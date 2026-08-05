@@ -335,6 +335,7 @@ def test_store_rejects_unknown_fields_and_moves_after_terminal_finish(
         ManifestStore(schema_version=1).load(path)
 
     payload = _payload(target)
+    payload["started_at"] = "2026-08-05T11:00:00+00:00"
     payload["finished_at"] = "2026-08-05T12:00:00+00:00"
     payload["updated_at"] = "2026-08-05T13:00:00+00:00"
     payload["moves"][0]["timestamp"] = "2026-08-05T12:30:00+00:00"
