@@ -37,6 +37,22 @@ class ManifestWriteError(OSError):
     """Raised when durable apply evidence cannot be persisted."""
 
 
+class ManifestError(ValueError):
+    """Base class for controlled operational manifest failures."""
+
+
+class ManifestPathError(ManifestError):
+    """Raised when a manifest path is outside the supported safe location."""
+
+
+class ManifestAccessError(ManifestError):
+    """Raised when a manifest cannot be read safely."""
+
+
+class ManifestFormatError(ManifestError):
+    """Raised when a manifest is malformed or incompatible."""
+
+
 class BrokenSourceSymlinkError(InvalidSourceError):
     """Raised when an explicit source symlink has no existing referent."""
 

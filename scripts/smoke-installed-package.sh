@@ -39,6 +39,8 @@ test "$VERSION_OUTPUT" = "smart-file-organizer $EXPECTED_VERSION"
 
 "$CLI" --help >/dev/null
 "$CLI" plan --help >/dev/null
+"$CLI" manifest --help >/dev/null
+"$CLI" recover --help >/dev/null
 
 SOURCE="$SOURCE_DIRECTORY/ordinary-user-note.txt"
 DESTINATION="$TARGET_DIRECTORY/documents/inbox/ordinary-user-note.txt"
@@ -70,6 +72,27 @@ MANIFEST="$(
 )"
 test -n "$MANIFEST"
 
+"$CLI" manifest show "$MANIFEST" --json | "$VENV/bin/python" -c '
+import json
+import sys
+assert json.load(sys.stdin)["schema_version"] == 1
+'
+"$CLI" manifest list --target "$TARGET_DIRECTORY" --json | "$VENV/bin/python" -c '
+import json
+import sys
+assert json.load(sys.stdin)[0]["status"] == "valid"
+'
+"$CLI" manifest verify "$MANIFEST" --json | "$VENV/bin/python" -c '
+import json
+import sys
+assert json.load(sys.stdin)["summary"]["consistent"] == 1
+'
+"$CLI" recover plan "$MANIFEST" --json | "$VENV/bin/python" -c '
+import json
+import sys
+assert json.load(sys.stdin)["items"][0]["disposition"] == "proposed"
+'
+
 "$VENV/bin/python" - <<'PY'
 from importlib import metadata, resources
 from pathlib import Path
@@ -96,6 +119,7 @@ for required_name in ("Homepage", "Repository", "Issues", "Changelog", "Releases
     assert any(value.startswith(f"{required_name},") for value in project_urls)
 
 expected_exports = [
+    "ApplyManifest",
     "BrokenSourceSymlinkError",
     "ClassificationCandidate",
     "ClassificationDecision",
@@ -112,21 +136,39 @@ expected_exports = [
     "EvidenceStrength",
     "FileCategory",
     "InvalidSourceError",
+    "ManifestAccessError",
+    "ManifestCounts",
+    "ManifestError",
+    "ManifestFormatError",
+    "ManifestMove",
+    "ManifestPathError",
+    "ManifestReference",
+    "ManifestReferenceStatus",
+    "ManifestVerification",
     "ManifestWriteError",
     "MatchMechanism",
     "MoveExecutionRecord",
+    "MoveReconciliation",
     "MoveStatus",
     "OrganizationPlan",
     "OrganizationPlanConflictError",
     "PlanOrganizationRequest",
     "PlannedMove",
+    "ReconciliationState",
+    "RecoveryDisposition",
+    "RecoveryPlan",
+    "RecoveryPlanItem",
     "SourceMissingError",
     "SourceSelectionError",
     "TaxonomyProfileName",
     "UnsafePathError",
     "UnsupportedSourceSymlinkError",
     "apply_organization",
+    "list_manifests",
+    "load_manifest",
+    "plan_recovery",
     "plan_organization",
+    "verify_manifest",
 ]
 assert api.__all__ == expected_exports
 for name in api.__all__:
