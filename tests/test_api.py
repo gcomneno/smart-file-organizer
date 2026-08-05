@@ -19,6 +19,7 @@ from smart_file_organizer.models import FileCategory
 
 
 EXPECTED_EXPORTS = [
+    "ApplyManifest",
     "BrokenSourceSymlinkError",
     "ClassificationCandidate",
     "ClassificationDecision",
@@ -35,21 +36,39 @@ EXPECTED_EXPORTS = [
     "EvidenceStrength",
     "FileCategory",
     "InvalidSourceError",
+    "ManifestAccessError",
+    "ManifestCounts",
+    "ManifestError",
+    "ManifestFormatError",
+    "ManifestMove",
+    "ManifestPathError",
+    "ManifestReference",
+    "ManifestReferenceStatus",
+    "ManifestVerification",
     "ManifestWriteError",
     "MatchMechanism",
     "MoveExecutionRecord",
+    "MoveReconciliation",
     "MoveStatus",
     "OrganizationPlan",
     "OrganizationPlanConflictError",
     "PlanOrganizationRequest",
     "PlannedMove",
+    "ReconciliationState",
+    "RecoveryDisposition",
+    "RecoveryPlan",
+    "RecoveryPlanItem",
     "SourceMissingError",
     "SourceSelectionError",
     "TaxonomyProfileName",
     "UnsafePathError",
     "UnsupportedSourceSymlinkError",
     "apply_organization",
+    "list_manifests",
+    "load_manifest",
+    "plan_recovery",
     "plan_organization",
+    "verify_manifest",
 ]
 
 FORBIDDEN_EXPORTS = {
@@ -115,6 +134,10 @@ def test_package_declares_inline_typing_support() -> None:
 def test_public_functions_are_the_application_functions() -> None:
     assert api.plan_organization is application.plan_organization
     assert api.apply_organization is application.apply_organization
+    assert api.load_manifest is application.load_manifest
+    assert api.list_manifests is application.list_manifests
+    assert api.verify_manifest is application.verify_manifest
+    assert api.plan_recovery is application.plan_recovery
 
 
 def test_importing_api_does_not_import_cli(tmp_path: Path) -> None:
@@ -251,6 +274,35 @@ def test_public_result_values_are_structured_and_immutable() -> None:
         assert is_dataclass(value)
         with pytest.raises(FrozenInstanceError):
             setattr(value, next(iter(value.__dataclass_fields__)), None)
+
+
+def test_manifest_models_are_frozen_slotted_and_copy_collections() -> None:
+    timestamp = datetime.now(timezone.utc)
+    move = api.ManifestMove(
+        original_path=Path("/source.txt"),
+        final_path=Path("/target/documents/source.txt"),
+        category=api.FileCategory.DOCUMENTS,
+        status=api.MoveStatus.COMPLETED,
+        timestamp=timestamp,
+    )
+    moves = [move]
+    manifest = api.ApplyManifest(
+        path=Path("/target/.smart-file-organizer/manifests/apply.json"),
+        schema_version=1,
+        state="completed",
+        target_root=Path("/target"),
+        started_at=timestamp,
+        updated_at=timestamp,
+        finished_at=timestamp,
+        counts=api.ManifestCounts(1, 0, 0, 0),
+        moves=cast(tuple[api.ManifestMove, ...], moves),
+    )
+    moves.clear()
+
+    assert manifest.moves == (move,)
+    assert hasattr(manifest, "__slots__")
+    with pytest.raises(FrozenInstanceError):
+        setattr(manifest, "state", "failed")
 
 
 def test_public_evidence_models_are_slotted_frozen_and_copy_collections() -> None:

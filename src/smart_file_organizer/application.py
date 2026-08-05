@@ -16,7 +16,17 @@ from smart_file_organizer.content_planning import (
     build_organization_plan_inspecting_content,
 )
 from smart_file_organizer.errors import DestinationConflictError, SourceSelectionError
-from smart_file_organizer.execution import execute_plan
+from smart_file_organizer.execution import MANIFEST_SCHEMA_VERSION, execute_plan
+from smart_file_organizer.manifest_models import (
+    ApplyManifest,
+    ManifestReference,
+    ManifestVerification,
+    RecoveryPlan,
+)
+from smart_file_organizer.manifest_store import ManifestStore
+from smart_file_organizer.manifest_verification import (
+    verify_manifest as _verify_manifest,
+)
 from smart_file_organizer.models import (
     ConflictStrategy,
     ExecutionResult,
@@ -36,9 +46,11 @@ from smart_file_organizer.planning import (
     list_source_files,
     resolve_destination_conflicts,
 )
+from smart_file_organizer.recovery_planning import plan_recovery as _plan_recovery
 
 
 logger = logging.getLogger(__name__)
+_manifest_store = ManifestStore(schema_version=MANIFEST_SCHEMA_VERSION)
 
 
 class _SourceCollector(Protocol):
@@ -268,3 +280,23 @@ def plan_organization(
 def apply_organization(plan: OrganizationPlan) -> ExecutionResult:
     """Apply a previously built organization plan without replanning it."""
     return execute_plan(plan.moves, plan.target_root)
+
+
+def load_manifest(path: Path) -> ApplyManifest:
+    """Load one validated historical apply manifest without mutation."""
+    return _manifest_store.load(path)
+
+
+def list_manifests(target_root: Path) -> tuple[ManifestReference, ...]:
+    """List direct manifest candidates for one target deterministically."""
+    return _manifest_store.list_for_target(target_root)
+
+
+def verify_manifest(path: Path) -> ManifestVerification:
+    """Reconcile one validated manifest with current filesystem observations."""
+    return _verify_manifest(load_manifest(path))
+
+
+def plan_recovery(path: Path) -> RecoveryPlan:
+    """Build a non-mutating manual recovery plan for one manifest."""
+    return _plan_recovery(verify_manifest(path))
