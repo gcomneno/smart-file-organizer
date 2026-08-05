@@ -126,7 +126,10 @@ from smart_file_organizer.api import (
     PlanOrganizationRequest,
     TaxonomyProfileName,
     apply_organization,
+    load_manifest,
+    plan_recovery,
     plan_organization,
+    verify_manifest,
 )
 
 
@@ -163,6 +166,14 @@ with TemporaryDirectory() as temporary_directory:
     result = apply_organization(plan)
     assert result.successful
     assert result.manifest_path.is_file()
+
+    # Historical manifest facts and current filesystem observations are separate.
+    manifest = load_manifest(result.manifest_path)
+    verification = verify_manifest(result.manifest_path)
+    recovery = plan_recovery(result.manifest_path)
+    assert manifest.schema_version == 1
+    assert len(verification.moves) == 1
+    assert recovery.proposed_count == 1
 ~~~
 <!-- python-api-example:end -->
 
@@ -255,6 +266,42 @@ uv run smart-file-organizer plan --from /path/to/source --target /path/to/organi
 ~~~
 
 This moves files into category directories under the target root.
+
+### Inspect and verify apply manifests
+
+Apply manifests are owned by the execution schema and currently use strict
+schema version 1. Existing version-1 manifests remain supported; the schema has
+no hashes, fingerprints, or identity fields. A manifest is therefore evidence
+of what the application recorded at the time, not evidence that destination
+bytes are unchanged today. The compatibility policy is intentionally strict:
+all required v1 fields must be present and unknown fields are rejected, so a
+future schema must receive an explicit reader rather than being guessed at.
+
+~~~bash
+smart-file-organizer manifest list --target /path/to/organized
+smart-file-organizer manifest show /path/to/organized/.smart-file-organizer/manifests/app-20260101T120000000000Z-0123456789ab.json
+smart-file-organizer manifest verify /path/to/organized/.smart-file-organizer/manifests/app-20260101T120000000000Z-0123456789ab.json --json
+smart-file-organizer recover plan /path/to/organized/.smart-file-organizer/manifests/app-20260101T120000000000Z-0123456789ab.json
+~~~
+
+`manifest list` is non-recursive. It considers only direct entries whose names
+match the apply-manifest filename format; unrelated files and directories are
+ignored. Matching entries that are malformed or unsafe are retained in the
+listing with an invalid status rather than being loaded as manifests.
+
+`verify` makes fresh, read-only lstat-style observations. It reports
+`consistent`, `source_restored`, `both_present`, `both_missing`,
+`unexpected_destination`, `destination_missing`, `indeterminate`, or
+`unsafe_path`; it does not claim byte-level integrity or an unchanged
+destination. A valid manifest with an inconsistent current filesystem is still
+a successful verification result.
+
+`recover plan` is also read-only. It proposes a reverse move only for an
+unambiguous completed record whose destination is still the safe, sole source
+and whose original location is safe and absent. It never creates directories,
+moves files, removes files, or deletes manifests. Automatic undo is deliberately
+deferred because v1 cannot prove file identity or safely resolve conflicts that
+may have arisen after the historical apply.
 
 Example target layout:
 

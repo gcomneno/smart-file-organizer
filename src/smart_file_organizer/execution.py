@@ -15,6 +15,7 @@ from smart_file_organizer.errors import (
     DestinationParentError,
     ManifestWriteError,
 )
+from smart_file_organizer.manifest_schema import execution_manifest_payload
 from smart_file_organizer.models import (
     ExecutionResult,
     MoveExecutionRecord,
@@ -107,56 +108,6 @@ def _initial_records(
     ]
 
 
-def _status_counts(
-    records: Iterable[MoveExecutionRecord],
-) -> dict[str, int]:
-    """Return manifest counts for all durable statuses."""
-    records_tuple = tuple(records)
-    return {
-        status.value: sum(record.status == status for record in records_tuple)
-        for status in MoveStatus
-    }
-
-
-def _manifest_state(
-    records: Iterable[MoveExecutionRecord],
-    finished_at: datetime | None,
-) -> str:
-    """Return the top-level manifest state."""
-    records_tuple = tuple(records)
-
-    if finished_at is None:
-        return "running"
-
-    if any(
-        record.status in {MoveStatus.FAILED, MoveStatus.IN_PROGRESS}
-        for record in records_tuple
-    ):
-        return "failed"
-
-    return "completed"
-
-
-def _record_payload(record: MoveExecutionRecord) -> dict[str, object]:
-    """Serialize one execution record."""
-    error: dict[str, str] | None = None
-
-    if record.error_type is not None or record.error_message is not None:
-        error = {
-            "type": record.error_type or "OSError",
-            "message": record.error_message or "",
-        }
-
-    return {
-        "original_path": str(record.original_path),
-        "final_path": str(record.final_path),
-        "category": record.category.value,
-        "status": record.status.value,
-        "timestamp": record.timestamp.isoformat(),
-        "error": error,
-    }
-
-
 def _manifest_payload(
     *,
     target_root: Path,
@@ -165,18 +116,14 @@ def _manifest_payload(
     records: Iterable[MoveExecutionRecord],
 ) -> dict[str, object]:
     """Build the complete JSON manifest payload."""
-    records_tuple = tuple(records)
-
-    return {
-        "schema_version": MANIFEST_SCHEMA_VERSION,
-        "state": _manifest_state(records_tuple, finished_at),
-        "target_root": str(_absolute_path(target_root)),
-        "started_at": started_at.isoformat(),
-        "updated_at": _utc_now().isoformat(),
-        "finished_at": finished_at.isoformat() if finished_at is not None else None,
-        "counts": _status_counts(records_tuple),
-        "moves": [_record_payload(record) for record in records_tuple],
-    }
+    return execution_manifest_payload(
+        schema_version=MANIFEST_SCHEMA_VERSION,
+        target_root=target_root,
+        started_at=started_at,
+        updated_at=_utc_now(),
+        finished_at=finished_at,
+        records=records,
+    )
 
 
 def _fsync_directory(path: Path) -> None:

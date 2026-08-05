@@ -14,7 +14,11 @@ from smart_file_organizer.application import (
     PlanOrganizationRequest,
     apply_organization,
     collect_sources as _collect_sources,
+    list_manifests,
+    load_manifest,
+    plan_recovery,
     plan_organization,
+    verify_manifest,
 )
 from smart_file_organizer.core import PlannedMove, format_execution_summary
 from smart_file_organizer.errors import (
@@ -24,9 +28,16 @@ from smart_file_organizer.errors import (
     DestinationParentError,
     InvalidSourceError,
     ManifestWriteError,
+    ManifestError,
     SourceMissingError,
     SourceSelectionError,
     UnsafePathError,
+)
+from smart_file_organizer.manifest_output import (
+    render_manifest,
+    render_recovery_plan,
+    render_references,
+    render_verification,
 )
 from smart_file_organizer.plan_output import render_plan_preview
 from smart_file_organizer.models import TaxonomyProfileName
@@ -70,6 +81,33 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     _add_plan_arguments(plan_parser)
+
+    manifest_parser = subparsers.add_parser(
+        "manifest", help="Inspect historical apply manifests."
+    )
+    manifest_commands = manifest_parser.add_subparsers(dest="manifest_command")
+    for name, help_text in (
+        ("show", "Show one validated manifest."),
+        ("verify", "Reconcile one manifest with current filesystem state."),
+    ):
+        command = manifest_commands.add_parser(name, help=help_text)
+        command.add_argument("manifest", type=Path, metavar="MANIFEST")
+        command.add_argument("--json", action="store_true", help="Render JSON output.")
+    list_parser = manifest_commands.add_parser("list", help="List manifest candidates.")
+    list_parser.add_argument("--target", type=Path, required=True, metavar="TARGET")
+    list_parser.add_argument("--json", action="store_true", help="Render JSON output.")
+
+    recover_parser = subparsers.add_parser(
+        "recover", help="Build non-mutating manual recovery plans."
+    )
+    recover_commands = recover_parser.add_subparsers(dest="recover_command")
+    recovery_plan_parser = recover_commands.add_parser(
+        "plan", help="Plan safe manual reverse moves without executing them."
+    )
+    recovery_plan_parser.add_argument("manifest", type=Path, metavar="MANIFEST")
+    recovery_plan_parser.add_argument(
+        "--json", action="store_true", help="Render JSON output."
+    )
 
     return parser
 
@@ -173,7 +211,7 @@ def _normalize_argv(argv: Sequence[str] | None) -> list[str]:
     }:
         return args
 
-    if args and args[0] == "plan":
+    if args and args[0] in {"plan", "manifest", "recover"}:
         return args
 
     return ["plan", *args]
@@ -206,7 +244,14 @@ def main(argv: Sequence[str] | None = None) -> None:
     """Run the smart-file-organizer command."""
     parser = build_parser()
     args = parser.parse_args(_normalize_argv(argv))
-    configure_logging(verbose=args.verbose)
+    configure_logging(verbose=getattr(args, "verbose", False))
+
+    if args.command == "manifest":
+        _run_manifest_command(parser, args)
+        return
+    if args.command == "recover":
+        _run_recovery_command(parser, args)
+        return
 
     logger.info(
         "event=cli_started inspect_content=%s apply=%s",
@@ -297,3 +342,42 @@ def main(argv: Sequence[str] | None = None) -> None:
             explain=args.explain,
         )
     )
+
+
+def _run_manifest_command(
+    parser: argparse.ArgumentParser, args: argparse.Namespace
+) -> None:
+    """Dispatch manifest CLI adapters through application services only."""
+    if args.manifest_command is None:
+        parser.error("manifest requires show, list, or verify")
+    try:
+        if args.manifest_command == "show":
+            sys.stdout.write(
+                render_manifest(load_manifest(args.manifest), json_output=args.json)
+            )
+        elif args.manifest_command == "list":
+            sys.stdout.write(
+                render_references(list_manifests(args.target), json_output=args.json)
+            )
+        else:
+            sys.stdout.write(
+                render_verification(
+                    verify_manifest(args.manifest), json_output=args.json
+                )
+            )
+    except ManifestError as error:
+        parser.error(str(error))
+
+
+def _run_recovery_command(
+    parser: argparse.ArgumentParser, args: argparse.Namespace
+) -> None:
+    """Dispatch the non-mutating recovery-plan CLI adapter."""
+    if args.recover_command is None:
+        parser.error("recover requires plan")
+    try:
+        sys.stdout.write(
+            render_recovery_plan(plan_recovery(args.manifest), json_output=args.json)
+        )
+    except ManifestError as error:
+        parser.error(str(error))
