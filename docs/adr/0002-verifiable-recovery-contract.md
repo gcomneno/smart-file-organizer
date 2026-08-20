@@ -1,6 +1,6 @@
 # ADR 0002: Verifiable recovery contract and failure model
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-08-20
 - Related issues: [#80](https://github.com/gcomneno/smart-file-organizer/issues/80), [#81](https://github.com/gcomneno/smart-file-organizer/issues/81)
 - Extends: [ADR 0001](0001-evolution-architecture.md)

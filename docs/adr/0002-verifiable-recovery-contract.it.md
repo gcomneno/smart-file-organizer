@@ -1,6 +1,6 @@
 # ADR 0002: Contratto di recovery verificabile e modello dei guasti
 
-- Stato: Proposto
+- Stato: Accettato
 - Data: 2026-08-20
 - Issue correlate: [#80](https://github.com/gcomneno/smart-file-organizer/issues/80), [#81](https://github.com/gcomneno/smart-file-organizer/issues/81)
 - Estende: [ADR 0001](0001-evolution-architecture.md)
