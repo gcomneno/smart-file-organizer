@@ -56,6 +56,12 @@ The current durable manifest writer and its truthful partial-failure evidence ar
 
 Recovery must be plan-first and dry-run-first. Ambiguous filesystem states must be represented rather than guessed away. No unconditional automatic undo or rollback is promised. Issue [#72](https://github.com/gcomneno/smart-file-organizer/issues/72) owns manifest reading, verification, and recovery planning.
 
+The later normative distinction between historical facts, current observations,
+identity evidence, and demonstrably safe recovery is defined by
+[ADR 0002](0002-verifiable-recovery-contract.md). ADR 0002 extends this
+architecture without retroactively adding identity evidence to manifest schema
+version 1.
+
 ## Preserved invariants
 
 The following are non-negotiable:

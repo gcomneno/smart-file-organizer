@@ -11,7 +11,10 @@ The project organizes files by building a safe plan first. By default it only pr
 
 The current released baseline is v0.4.2. Its operational behavior and
 limitations are documented in this README. The approved forward architectural
-direction is [ADR 0001](docs/adr/0001-evolution-architecture.md), and roadmap
+direction is [ADR 0001](docs/adr/0001-evolution-architecture.md). The normative
+verifiable-recovery contract is defined by
+[ADR 0002](docs/adr/0002-verifiable-recovery-contract.md), with an
+[Italian mirror](docs/adr/0002-verifiable-recovery-contract.it.md). Roadmap
 implementation is tracked in [issue #67](https://github.com/gcomneno/smart-file-organizer/issues/67).
 The [product readiness assessment](docs/product-readiness-assessment.md) is
 retained as the historical v0.3.3 assessment; its verdict does not describe
