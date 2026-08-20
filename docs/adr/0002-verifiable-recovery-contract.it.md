@@ -180,6 +180,24 @@ Nessuna combinazione della sola esistenza dei path è sufficiente.
 La verification dello stato corrente e l'autorizzazione del recovery rispondono
 a domande differenti e non devono essere fuse in un'unica macchina a stati.
 
+La verification pone domande quali:
+
+- cosa esiste attualmente;
+- se i path sono sicuri da osservare;
+- se l'identity evidence può essere valutata;
+- se i byte correnti corrispondono all'evidence registrata;
+- se lo stato è missing, changed, conflicting, ambiguous o unverifiable.
+
+La recovery-safety classification chiede:
+
+- data l'historical evidence e le current observations verificate, un reverse
+  move può essere proposto come sicuro?
+
+Un risultato di verification è un input per una recovery-safety decision. Non
+costituisce di per sé mutation authority.
+
+I verification finding e le recovery-safety decision rimangono distinti.
+
 La verification deve poter distinguere almeno:
 
 | Verification finding | Significato |
@@ -218,6 +236,9 @@ boundary.
 
 Ogni proposta, refusal o abstention di recovery deve esporre uno stable
 machine-readable reason code.
+
+I reason code identificano perché è stata raggiunta una decisione; non sono
+messaggi umani free-form.
 
 Il vocabolario normativo iniziale è:
 
