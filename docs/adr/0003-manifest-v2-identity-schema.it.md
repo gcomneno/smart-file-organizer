@@ -1,6 +1,6 @@
 # ADR 0003: Schema di identità e fingerprint di Manifest v2
 
-- Stato: Proposto
+- Stato: Accettato
 - Data: 2026-08-23
 - Issue correlate: [#80](https://github.com/gcomneno/smart-file-organizer/issues/80), [#85](https://github.com/gcomneno/smart-file-organizer/issues/85)
 - Dipende da: [ADR 0002](0002-verifiable-recovery-contract.it.md)
