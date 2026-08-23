@@ -1,12 +1,10 @@
 """Failure-aware move execution and durable apply manifests."""
 
-import hashlib
 import json
 import os
 import shutil
-import stat
 from collections.abc import Iterable
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -29,18 +27,14 @@ from smart_file_organizer.path_validation import (
     validate_plan_destinations,
     validate_source_files,
 )
+from smart_file_organizer.payload_identity import (
+    _Fingerprint,
+    _fingerprint_regular_file,
+)
 
 
 MANIFEST_SCHEMA_VERSION = 2
 _MANIFEST_DIRECTORY = Path(".smart-file-organizer") / "manifests"
-_FINGERPRINT_CHUNK_SIZE = 1024 * 1024
-
-
-@dataclass(frozen=True, slots=True)
-class _Fingerprint:
-    digest: str
-    size_bytes: int
-    observed_at: datetime
 
 
 def _utc_now() -> datetime:
@@ -190,36 +184,6 @@ def _write_manifest(
         raise ManifestWriteError(
             f"could not persist apply manifest {manifest_path}: {error}"
         ) from error
-
-
-def _fingerprint_regular_file(path: Path) -> _Fingerprint:
-    """Observe one regular-file payload through one complete bounded stream."""
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
-    try:
-        descriptor = os.open(path, flags)
-    except (OSError, ValueError) as error:
-        raise OSError(f"could not fingerprint regular file: {path}: {error}") from error
-
-    try:
-        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
-            raise OSError(f"fingerprint path is not a regular file: {path}")
-
-        digest = hashlib.sha256()
-        size_bytes = 0
-        with os.fdopen(descriptor, "rb") as stream:
-            descriptor = -1
-            while chunk := stream.read(_FINGERPRINT_CHUNK_SIZE):
-                digest.update(chunk)
-                size_bytes += len(chunk)
-    finally:
-        if descriptor != -1:
-            os.close(descriptor)
-
-    return _Fingerprint(
-        digest=digest.hexdigest(),
-        size_bytes=size_bytes,
-        observed_at=_utc_now(),
-    )
 
 
 def _identity_evidence(

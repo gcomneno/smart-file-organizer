@@ -30,6 +30,37 @@ class ReconciliationState(StrEnum):
     UNSAFE_PATH = "unsafe_path"
 
 
+class IdentityVerificationState(StrEnum):
+    """Byte-identity comparison result for one historical move."""
+
+    IDENTITY_MATCH = "identity_match"
+    IDENTITY_MISMATCH = "identity_mismatch"
+    IDENTITY_UNVERIFIABLE = "identity_unverifiable"
+
+
+class IdentityObservationStatus(StrEnum):
+    """Current destination identity observation status."""
+
+    FINGERPRINTED = "fingerprinted"
+    NOT_OBSERVED = "not_observed"
+    MISSING = "missing"
+    UNSAFE_PATH = "unsafe_path"
+    UNSUPPORTED_FILE_TYPE = "unsupported_file_type"
+    OBSERVATION_FAILED = "observation_failed"
+
+
+class IdentityVerificationReason(StrEnum):
+    """Stable reason for one byte-identity verification result."""
+
+    IDENTITY_VERIFIED = "identity_verified"
+    DESTINATION_CHANGED = "destination_changed"
+    HISTORICAL_IDENTITY_ABSENT = "historical_identity_absent"
+    DESTINATION_MISSING = "destination_missing"
+    UNSAFE_PATH = "unsafe_path"
+    UNSUPPORTED_FILE_TYPE = "unsupported_file_type"
+    OBSERVATION_FAILED = "observation_failed"
+
+
 class RecoveryDisposition(StrEnum):
     """Read-only recovery decision for one manifest record."""
 
@@ -103,6 +134,34 @@ class ManifestReference:
 
 
 @dataclass(frozen=True, slots=True)
+class CurrentIdentityObservation:
+    """Freshly observed destination payload identity, when available."""
+
+    status: IdentityObservationStatus
+    algorithm: str | None = None
+    digest: str | None = None
+    size_bytes: int | None = None
+    observed_at: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class MoveIdentityVerification:
+    """Current byte-identity comparison for one historical move."""
+
+    state: IdentityVerificationState
+    reason: IdentityVerificationReason
+    current: CurrentIdentityObservation
+
+
+def _default_identity_verification() -> MoveIdentityVerification:
+    return MoveIdentityVerification(
+        IdentityVerificationState.IDENTITY_UNVERIFIABLE,
+        IdentityVerificationReason.HISTORICAL_IDENTITY_ABSENT,
+        CurrentIdentityObservation(IdentityObservationStatus.NOT_OBSERVED),
+    )
+
+
+@dataclass(frozen=True, slots=True)
 class MoveReconciliation:
     """Current non-mutating observation for one historical move."""
 
@@ -110,6 +169,9 @@ class MoveReconciliation:
     state: ReconciliationState
     source_exists: bool | None
     destination_exists: bool | None
+    identity: MoveIdentityVerification = field(
+        default_factory=_default_identity_verification
+    )
 
 
 @dataclass(frozen=True, slots=True)

@@ -28,6 +28,7 @@ EXPECTED_EXPORTS = [
     "ClassificationSource",
     "ConfigError",
     "ConflictStrategy",
+    "CurrentIdentityObservation",
     "DestinationConflictError",
     "DestinationExistsError",
     "DestinationParentError",
@@ -35,6 +36,9 @@ EXPECTED_EXPORTS = [
     "EvidenceSource",
     "EvidenceStrength",
     "FileCategory",
+    "IdentityObservationStatus",
+    "IdentityVerificationReason",
+    "IdentityVerificationState",
     "InvalidSourceError",
     "ManifestAccessError",
     "ManifestCounts",
@@ -48,6 +52,7 @@ EXPECTED_EXPORTS = [
     "ManifestWriteError",
     "MatchMechanism",
     "MoveExecutionRecord",
+    "MoveIdentityVerification",
     "MoveReconciliation",
     "MoveStatus",
     "OrganizationPlan",
@@ -278,6 +283,18 @@ def test_public_result_values_are_structured_and_immutable() -> None:
 
 def test_manifest_models_are_frozen_slotted_and_copy_collections() -> None:
     timestamp = datetime.now(timezone.utc)
+    observation = api.CurrentIdentityObservation(
+        status=api.IdentityObservationStatus.FINGERPRINTED,
+        algorithm="sha256",
+        digest="0" * 64,
+        size_bytes=0,
+        observed_at=timestamp,
+    )
+    identity = api.MoveIdentityVerification(
+        state=api.IdentityVerificationState.IDENTITY_MATCH,
+        reason=api.IdentityVerificationReason.IDENTITY_VERIFIED,
+        current=observation,
+    )
     move = api.ManifestMove(
         original_path=Path("/source.txt"),
         final_path=Path("/target/documents/source.txt"),
@@ -301,8 +318,23 @@ def test_manifest_models_are_frozen_slotted_and_copy_collections() -> None:
 
     assert manifest.moves == (move,)
     assert hasattr(manifest, "__slots__")
+    assert hasattr(identity, "__slots__")
+    reconciliation = api.MoveReconciliation(
+        move,
+        api.ReconciliationState.CONSISTENT,
+        source_exists=False,
+        destination_exists=True,
+    )
+    assert reconciliation.identity.state is (
+        api.IdentityVerificationState.IDENTITY_UNVERIFIABLE
+    )
+    assert reconciliation.identity.reason is (
+        api.IdentityVerificationReason.HISTORICAL_IDENTITY_ABSENT
+    )
     with pytest.raises(FrozenInstanceError):
         setattr(manifest, "state", "failed")
+    with pytest.raises(FrozenInstanceError):
+        setattr(identity, "state", api.IdentityVerificationState.IDENTITY_MISMATCH)
 
 
 def test_public_evidence_models_are_slotted_frozen_and_copy_collections() -> None:
