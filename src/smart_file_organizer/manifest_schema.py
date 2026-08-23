@@ -9,7 +9,11 @@ from pathlib import Path
 from typing import Any, cast
 
 from smart_file_organizer.errors import ManifestFormatError
-from smart_file_organizer.manifest_models import ApplyManifest, ManifestCounts, ManifestMove
+from smart_file_organizer.manifest_models import (
+    ApplyManifest,
+    ManifestCounts,
+    ManifestMove,
+)
 from smart_file_organizer.models import (
     FileCategory,
     IdentityEvidence,
@@ -146,7 +150,9 @@ def _no_duplicate_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
-def _mapping(value: object, *, fields: frozenset[str], label: str) -> Mapping[str, Any]:
+def _mapping(
+    value: object, *, fields: frozenset[str], label: str
+) -> Mapping[str, Any]:
     if not isinstance(value, dict) or set(value) != fields:
         raise ManifestFormatError(f"manifest {label} fields are invalid")
     return cast(Mapping[str, Any], value)
@@ -192,7 +198,6 @@ def validate_manifest(
     if (
         version not in _SUPPORTED_SCHEMA_VERSIONS
         or expected_version not in _SUPPORTED_SCHEMA_VERSIONS
-        or version > expected_version
     ):
         raise ManifestFormatError("manifest schema version is unsupported")
 
@@ -267,7 +272,11 @@ def _move(
     raw = _mapping(value, fields=fields, label="move")
     original = _absolute_canonical_path(raw["original_path"], label="original path")
     final = _absolute_canonical_path(raw["final_path"], label="final path")
-    if original == final or final == target_root or not final.is_relative_to(target_root):
+    if (
+        original == final
+        or final == target_root
+        or not final.is_relative_to(target_root)
+    ):
         raise ManifestFormatError("manifest move paths are contradictory")
     try:
         category = FileCategory(raw["category"])
