@@ -1,10 +1,12 @@
 """Failure-aware move execution and durable apply manifests."""
 
+import hashlib
 import json
 import os
 import shutil
+import stat
 from collections.abc import Iterable
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -18,6 +20,7 @@ from smart_file_organizer.errors import (
 from smart_file_organizer.manifest_schema import execution_manifest_payload
 from smart_file_organizer.models import (
     ExecutionResult,
+    IdentityEvidence,
     MoveExecutionRecord,
     MoveStatus,
     PlannedMove,
@@ -28,8 +31,16 @@ from smart_file_organizer.path_validation import (
 )
 
 
-MANIFEST_SCHEMA_VERSION = 1
+MANIFEST_SCHEMA_VERSION = 2
 _MANIFEST_DIRECTORY = Path(".smart-file-organizer") / "manifests"
+_FINGERPRINT_CHUNK_SIZE = 1024 * 1024
+
+
+@dataclass(frozen=True, slots=True)
+class _Fingerprint:
+    digest: str
+    size_bytes: int
+    observed_at: datetime
 
 
 def _utc_now() -> datetime:
@@ -181,6 +192,52 @@ def _write_manifest(
         ) from error
 
 
+def _fingerprint_regular_file(path: Path) -> _Fingerprint:
+    """Observe one regular-file payload through one complete bounded stream."""
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except (OSError, ValueError) as error:
+        raise OSError(f"could not fingerprint regular file: {path}: {error}") from error
+
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise OSError(f"fingerprint path is not a regular file: {path}")
+
+        digest = hashlib.sha256()
+        size_bytes = 0
+        with os.fdopen(descriptor, "rb") as stream:
+            descriptor = -1
+            while chunk := stream.read(_FINGERPRINT_CHUNK_SIZE):
+                digest.update(chunk)
+                size_bytes += len(chunk)
+    finally:
+        if descriptor != -1:
+            os.close(descriptor)
+
+    return _Fingerprint(
+        digest=digest.hexdigest(),
+        size_bytes=size_bytes,
+        observed_at=_utc_now(),
+    )
+
+
+def _identity_evidence(
+    source: _Fingerprint,
+    destination: _Fingerprint,
+) -> IdentityEvidence:
+    """Require two-sided equality before constructing complete identity evidence."""
+    if source.digest != destination.digest or source.size_bytes != destination.size_bytes:
+        raise OSError("destination fingerprint does not match source fingerprint")
+    return IdentityEvidence(
+        algorithm="sha256",
+        digest=source.digest,
+        size_bytes=source.size_bytes,
+        source_observed_at=source.observed_at,
+        destination_observed_at=destination.observed_at,
+    )
+
+
 def _move_completed(move: PlannedMove) -> None:
     """Verify the minimum observable postcondition of a successful move."""
     if not os.path.lexists(move.destination):
@@ -251,6 +308,7 @@ def execute_plan(
             timestamp=attempt_started_at,
             error_type=None,
             error_message=None,
+            identity=None,
         )
 
         _write_manifest(
@@ -263,8 +321,11 @@ def execute_plan(
 
         try:
             move.destination.parent.mkdir(parents=True, exist_ok=True)
+            source_fingerprint = _fingerprint_regular_file(move.source)
             shutil.move(move.source, move.destination)
             _move_completed(move)
+            destination_fingerprint = _fingerprint_regular_file(move.destination)
+            identity = _identity_evidence(source_fingerprint, destination_fingerprint)
         except OSError as error:
             failed_at = _utc_now()
             records[index] = replace(
@@ -273,6 +334,7 @@ def execute_plan(
                 timestamp=failed_at,
                 error_type=type(error).__name__,
                 error_message=str(error),
+                identity=None,
             )
 
             _write_manifest(
@@ -297,6 +359,7 @@ def execute_plan(
             timestamp=completed_at,
             error_type=None,
             error_message=None,
+            identity=identity,
         )
 
         finished_at = completed_at if index == len(moves) - 1 else None
