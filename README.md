@@ -174,8 +174,11 @@ with TemporaryDirectory() as temporary_directory:
     manifest = load_manifest(result.manifest_path)
     verification = verify_manifest(result.manifest_path)
     recovery = plan_recovery(result.manifest_path)
-    assert manifest.schema_version == 1
+    assert manifest.schema_version == 2
+    assert manifest.moves[0].identity is not None
     assert len(verification.moves) == 1
+    # Recovery planning is still the pre-v2 path-reconciliation behavior here.
+    # It is not yet an identity-aware SAFE_TO_RECOVER classification.
     assert recovery.proposed_count == 1
 ~~~
 <!-- python-api-example:end -->
@@ -272,13 +275,19 @@ This moves files into category directories under the target root.
 
 ### Inspect and verify apply manifests
 
-Apply manifests are owned by the execution schema and currently use strict
-schema version 1. Existing version-1 manifests remain supported; the schema has
-no hashes, fingerprints, or identity fields. A manifest is therefore evidence
-of what the application recorded at the time, not evidence that destination
-bytes are unchanged today. The compatibility policy is intentionally strict:
-all required v1 fields must be present and unknown fields are rejected, so a
-future schema must receive an explicit reader rather than being guessed at.
+Apply manifests are owned by an independently versioned execution schema.
+Explicit apply now writes strict schema version 2 manifests. Every completed v2
+move carries historical payload identity evidence built from a full SHA-256 and
+byte count observed at the source immediately before the move and again at the
+destination after the move postcondition. Both observations must match before
+the move is recorded as completed.
+
+Existing schema-version-1 manifests remain strictly readable under their
+original contract and gain no retroactive identity evidence. Readers dispatch
+explicitly between supported v1 and v2 semantics; unknown schemas and unknown
+fields fail closed. Historical v2 identity evidence describes bytes observed
+during apply and does not prove that destination bytes remain unchanged later.
+Current identity verification is deliberately a separate follow-up capability.
 
 ~~~bash
 smart-file-organizer manifest list --target /path/to/organized
@@ -420,13 +429,18 @@ the ordinary filename rules while making the degraded outcome visible.
 
 ## Symlink and hidden-file policy
 
-Source handling follows one deterministic policy during collection, preview,
-and apply:
+Source collection and preview retain the established source policy:
 
 - regular files are included;
-- symlinks to regular files are included and moved as symbolic links;
-- file symlinks are not dereferenced and their referent is not moved;
+- symlinks to regular files may be included in a plan;
 - directory symlinks are never traversed;
+
+Manifest v2 apply has a stricter payload-evidence boundary. Before each
+consequential move the source must be observable as a regular-file payload
+without dereferencing a symlink. A planned file symlink therefore fails closed
+during v2 apply before `shutil.move()` is called; the link and its referent are
+left untouched. This restriction is required by the accepted Manifest v2
+identity contract and does not broaden symlink traversal.
 - a directory symlink cannot be used as the `--from` scan root;
 - broken symlinks are rejected when passed explicitly and ignored during scans;
 - hidden files are included in both direct and recursive scans;
@@ -436,11 +450,10 @@ Recursive traversal explicitly checks symbolic links before considering a path
 as a directory. Directory-link cycles therefore cannot cause recursive
 traversal or duplicate discovery.
 
-Moving a file symlink preserves the link object and its stored target text.
-An absolute link therefore continues to identify the same absolute target.
-A relative link can resolve differently after being moved into another
-directory and may become broken. The organizer does not silently rewrite,
-dereference, or repair relative symlinks.
+Dry-run planning does not dereference, rewrite, repair, or fingerprint file
+symlinks. Explicit Manifest v2 apply refuses them at the regular-file
+fingerprinting boundary rather than manufacturing identity evidence for the
+referent.
 
 ## Apply results and recovery manifests
 
@@ -463,8 +476,11 @@ path, final path, category, status, timestamp, and any captured error.
 
 The durable statuses mean:
 
-- `completed`: the move returned successfully and the final path was observed;
-- `failed`: the attempted move raised an expected filesystem error;
+- `completed`: the v2 source fingerprint succeeded, the move and pathname
+  postconditions succeeded, the destination fingerprint succeeded, and source
+  and destination SHA-256 plus byte count matched;
+- `failed`: the v2 completion contract failed at source observation, move,
+  pathname postcondition, destination observation, or identity comparison;
 - `unattempted`: execution stopped before this move was attempted;
 - `in_progress`: execution or manifest persistence was interrupted while the
   move required investigation.

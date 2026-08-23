@@ -163,9 +163,7 @@ def _write_manifest(
     records: Iterable[MoveExecutionRecord],
 ) -> None:
     """Atomically persist and synchronize the current execution state."""
-    temporary_path = manifest_path.with_name(
-        f".{manifest_path.name}.{uuid4().hex}.tmp"
-    )
+    temporary_path = manifest_path.with_name(f".{manifest_path.name}.{uuid4().hex}.tmp")
 
     payload = _manifest_payload(
         target_root=target_root,
@@ -200,9 +198,7 @@ def _fingerprint_regular_file(path: Path) -> _Fingerprint:
     try:
         descriptor = os.open(path, flags)
     except (OSError, ValueError) as error:
-        raise OSError(
-            f"could not fingerprint regular file: {path}: {error}"
-        ) from error
+        raise OSError(f"could not fingerprint regular file: {path}: {error}") from error
 
     try:
         if not stat.S_ISREG(os.fstat(descriptor).st_mode):
@@ -231,7 +227,10 @@ def _identity_evidence(
     destination: _Fingerprint,
 ) -> IdentityEvidence:
     """Require two-sided equality before constructing complete identity evidence."""
-    if source.digest != destination.digest or source.size_bytes != destination.size_bytes:
+    if (
+        source.digest != destination.digest
+        or source.size_bytes != destination.size_bytes
+    ):
         raise OSError("destination fingerprint does not match source fingerprint")
     return IdentityEvidence(
         algorithm="sha256",

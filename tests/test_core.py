@@ -4,6 +4,7 @@ import pytest
 
 from smart_file_organizer.core import (
     FileCategory,
+    MoveStatus,
     PlannedMove,
     SemanticRuleDefinition,
     build_organization_plan,
@@ -959,7 +960,7 @@ def test_execute_plan_rejects_directory_source_before_moving_anything(
     assert not target_root.exists()
 
 
-def test_execute_plan_moves_file_symlink_as_link_and_keeps_referent(
+def test_execute_plan_refuses_file_symlink_at_v2_fingerprint_boundary(
     tmp_path: Path,
 ) -> None:
     referent = tmp_path / "referent.txt"
@@ -971,10 +972,12 @@ def test_execute_plan_moves_file_symlink_as_link_and_keeps_referent(
     target_root = tmp_path / "organized"
     plan = build_organization_plan([source], target_root)
 
-    execute_plan(plan, target_root)
+    result = execute_plan(plan, target_root)
 
     destination = target_root / "documents" / "inbox" / "link.txt"
-    assert destination.is_symlink()
-    assert destination.read_text() == "notes"
+    assert result.failed_count == 1
+    assert result.moves[0].status is MoveStatus.FAILED
+    assert result.moves[0].identity is None
+    assert source.is_symlink()
+    assert not destination.exists()
     assert referent.read_text() == "notes"
-    assert not source.exists()

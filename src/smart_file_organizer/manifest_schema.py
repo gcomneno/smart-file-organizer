@@ -150,9 +150,7 @@ def _no_duplicate_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
-def _mapping(
-    value: object, *, fields: frozenset[str], label: str
-) -> Mapping[str, Any]:
+def _mapping(value: object, *, fields: frozenset[str], label: str) -> Mapping[str, Any]:
     if not isinstance(value, dict) or set(value) != fields:
         raise ManifestFormatError(f"manifest {label} fields are invalid")
     return cast(Mapping[str, Any], value)
@@ -359,7 +357,9 @@ def _identity(
         or destination_observed_at > updated_at
         or move_timestamp < destination_observed_at
     ):
-        raise ManifestFormatError("manifest move identity timestamp ordering is invalid")
+        raise ManifestFormatError(
+            "manifest move identity timestamp ordering is invalid"
+        )
     return IdentityEvidence(
         algorithm=algorithm,
         digest=digest,

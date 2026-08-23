@@ -75,7 +75,7 @@ test -n "$MANIFEST"
 "$CLI" manifest show "$MANIFEST" --json | "$VENV/bin/python" -c '
 import json
 import sys
-assert json.load(sys.stdin)["schema_version"] == 1
+assert json.load(sys.stdin)["schema_version"] == 2
 '
 "$CLI" manifest list --target "$TARGET_DIRECTORY" --json | "$VENV/bin/python" -c '
 import json
