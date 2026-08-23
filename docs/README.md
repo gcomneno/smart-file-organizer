@@ -31,3 +31,7 @@ change.
   — canonical English version.
 - [ADR 0002 — Contratto di recovery verificabile e modello dei guasti](adr/0002-verifiable-recovery-contract.it.md)
   — Italian mirror.
+- [ADR 0003 — Manifest v2 identity and fingerprint schema](adr/0003-manifest-v2-identity-schema.md)
+  — canonical English version; proposed by issue #85.
+- [ADR 0003 — Schema di identità e fingerprint di Manifest v2](adr/0003-manifest-v2-identity-schema.it.md)
+  — Italian mirror.
