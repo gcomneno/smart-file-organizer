@@ -124,7 +124,9 @@ def test_store_loads_interrupted_zero_move_manifest_from_current_writer(
         execution_module.execute_plan((), target)
 
     path = next((target / ".smart-file-organizer" / "manifests").iterdir())
-    manifest = ManifestStore(schema_version=1).load(path)
+    manifest = ManifestStore(
+        schema_version=execution_module.MANIFEST_SCHEMA_VERSION
+    ).load(path)
 
     assert manifest.state == "running"
     assert manifest.finished_at is None
@@ -150,7 +152,7 @@ def test_store_loads_and_lists_manifest_written_through_target_root_symlink(
     )
 
     result = execution_module.execute_plan(plan, target)
-    store = ManifestStore(schema_version=1)
+    store = ManifestStore(schema_version=execution_module.MANIFEST_SCHEMA_VERSION)
 
     manifest = store.load(result.manifest_path)
     references = store.list_for_target(target)
@@ -199,7 +201,9 @@ def test_store_rejects_alias_store_manifest_with_mismatched_lexical_target(
     result.manifest_path.write_text(json.dumps(payload), encoding="utf-8")
 
     with pytest.raises(ManifestPathError, match="declared target root"):
-        ManifestStore(schema_version=1).load(result.manifest_path)
+        ManifestStore(schema_version=execution_module.MANIFEST_SCHEMA_VERSION).load(
+            result.manifest_path
+        )
 
 
 def test_store_loads_interrupted_multi_move_writer_manifest(
@@ -245,13 +249,38 @@ def test_store_loads_interrupted_multi_move_writer_manifest(
         execution_module.execute_plan(plan, target)
 
     path = next((target / ".smart-file-organizer" / "manifests").iterdir())
-    manifest = ManifestStore(schema_version=1).load(path)
+    manifest = ManifestStore(
+        schema_version=execution_module.MANIFEST_SCHEMA_VERSION
+    ).load(path)
 
     assert manifest.state == "running"
     assert [move.status for move in manifest.moves] == [
         MoveStatus.COMPLETED,
         MoveStatus.UNATTEMPTED,
     ]
+
+
+def test_v1_limited_store_rejects_current_v2_writer_manifest(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.txt"
+    source.write_text("source", encoding="utf-8")
+    target = tmp_path / "target"
+    plan = (
+        PlannedMove(
+            source,
+            target / "documents" / source.name,
+            FileCategory.DOCUMENTS,
+        ),
+    )
+
+    result = execution_module.execute_plan(plan, target)
+
+    with pytest.raises(
+        ManifestFormatError,
+        match="schema version is unsupported",
+    ):
+        ManifestStore(schema_version=1).load(result.manifest_path)
 
 
 @pytest.mark.parametrize("suffix", ("/.", "//"))

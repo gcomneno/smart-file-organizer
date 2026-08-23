@@ -1,7 +1,8 @@
-"""Private schema-v1 serialization and validation shared by manifests."""
+"""Private serialization and strict validation for supported manifest schemas."""
 
 import json
 import os
+import re
 from collections.abc import Iterable, Mapping
 from datetime import datetime
 from pathlib import Path
@@ -13,9 +14,15 @@ from smart_file_organizer.manifest_models import (
     ManifestCounts,
     ManifestMove,
 )
-from smart_file_organizer.models import FileCategory, MoveExecutionRecord, MoveStatus
+from smart_file_organizer.models import (
+    FileCategory,
+    IdentityEvidence,
+    MoveExecutionRecord,
+    MoveStatus,
+)
 
 
+_SUPPORTED_SCHEMA_VERSIONS = frozenset({1, 2})
 _TOP_LEVEL_FIELDS = frozenset(
     {
         "schema_version",
@@ -29,10 +36,21 @@ _TOP_LEVEL_FIELDS = frozenset(
     }
 )
 _COUNT_FIELDS = frozenset(status.value for status in MoveStatus)
-_MOVE_FIELDS = frozenset(
+_MOVE_FIELDS_V1 = frozenset(
     {"original_path", "final_path", "category", "status", "timestamp", "error"}
 )
+_MOVE_FIELDS_V2 = _MOVE_FIELDS_V1 | {"identity"}
 _ERROR_FIELDS = frozenset({"type", "message"})
+_IDENTITY_FIELDS = frozenset(
+    {
+        "algorithm",
+        "digest",
+        "size_bytes",
+        "source_observed_at",
+        "destination_observed_at",
+    }
+)
+_SHA256_HEX = re.compile(r"[0-9a-f]{64}\Z")
 
 
 def execution_manifest_payload(
@@ -44,7 +62,10 @@ def execution_manifest_payload(
     finished_at: datetime | None,
     records: Iterable[MoveExecutionRecord],
 ) -> dict[str, object]:
-    """Serialize the established writer payload without changing schema ownership."""
+    """Serialize one supported writer payload without weakening schema boundaries."""
+    if schema_version not in _SUPPORTED_SCHEMA_VERSIONS:
+        raise ValueError(f"unsupported manifest schema version: {schema_version}")
+
     records_tuple = tuple(records)
     counts = {
         status.value: sum(record.status == status for record in records_tuple)
@@ -62,6 +83,27 @@ def execution_manifest_payload(
             else "completed"
         )
     )
+    moves: list[dict[str, object]] = []
+    for record in records_tuple:
+        move: dict[str, object] = {
+            "original_path": str(record.original_path),
+            "final_path": str(record.final_path),
+            "category": record.category.value,
+            "status": record.status.value,
+            "timestamp": record.timestamp.isoformat(),
+            "error": (
+                None
+                if record.error_type is None and record.error_message is None
+                else {
+                    "type": record.error_type or "OSError",
+                    "message": record.error_message or "",
+                }
+            ),
+        }
+        if schema_version == 2:
+            move["identity"] = _identity_payload(record.identity)
+        moves.append(move)
+
     return {
         "schema_version": schema_version,
         "state": state,
@@ -70,29 +112,24 @@ def execution_manifest_payload(
         "updated_at": updated_at.isoformat(),
         "finished_at": finished_at.isoformat() if finished_at is not None else None,
         "counts": counts,
-        "moves": [
-            {
-                "original_path": str(record.original_path),
-                "final_path": str(record.final_path),
-                "category": record.category.value,
-                "status": record.status.value,
-                "timestamp": record.timestamp.isoformat(),
-                "error": (
-                    None
-                    if record.error_type is None and record.error_message is None
-                    else {
-                        "type": record.error_type or "OSError",
-                        "message": record.error_message or "",
-                    }
-                ),
-            }
-            for record in records_tuple
-        ],
+        "moves": moves,
+    }
+
+
+def _identity_payload(identity: IdentityEvidence | None) -> object:
+    if identity is None:
+        return None
+    return {
+        "algorithm": identity.algorithm,
+        "digest": identity.digest,
+        "size_bytes": identity.size_bytes,
+        "source_observed_at": identity.source_observed_at.isoformat(),
+        "destination_observed_at": identity.destination_observed_at.isoformat(),
     }
 
 
 def loads_manifest(text: str, *, path: Path, expected_version: int) -> ApplyManifest:
-    """Parse duplicate-key-safe JSON and return a strict validated model."""
+    """Parse duplicate-key-safe JSON and dispatch to an explicit strict schema."""
     try:
         payload = json.loads(text, object_pairs_hook=_no_duplicate_object)
     except (json.JSONDecodeError, _DuplicateKeyError) as error:
@@ -153,17 +190,18 @@ def _absolute_canonical_path(value: object, *, label: str) -> Path:
 def validate_manifest(
     payload: object, *, path: Path, expected_version: int
 ) -> ApplyManifest:
-    """Validate the exact strict v1 writer contract into immutable facts."""
+    """Validate one explicitly supported schema into immutable historical facts."""
     top = _mapping(payload, fields=_TOP_LEVEL_FIELDS, label="top-level")
     version = _integer(top["schema_version"], label="schema version")
-    if version != expected_version:
+    if (
+        version not in _SUPPORTED_SCHEMA_VERSIONS
+        or expected_version not in _SUPPORTED_SCHEMA_VERSIONS
+        or version > expected_version
+    ):
         raise ManifestFormatError("manifest schema version is unsupported")
+
     state = top["state"]
-    if not isinstance(state, str) or state not in {
-        "running",
-        "completed",
-        "failed",
-    }:
+    if not isinstance(state, str) or state not in {"running", "completed", "failed"}:
         raise ManifestFormatError("manifest execution state is invalid")
     target_root = _absolute_canonical_path(top["target_root"], label="target root")
     started_at = _timestamp(top["started_at"], label="started timestamp")
@@ -179,6 +217,7 @@ def validate_manifest(
         and (finished_at < started_at or finished_at > updated_at)
     ):
         raise ManifestFormatError("manifest timestamp ordering is invalid")
+
     raw_counts = _mapping(top["counts"], fields=_COUNT_FIELDS, label="counts")
     counts = ManifestCounts(
         **{
@@ -190,7 +229,14 @@ def validate_manifest(
     if not isinstance(raw_moves, list):
         raise ManifestFormatError("manifest moves are invalid")
     moves = tuple(
-        _move(item, target_root, started_at, updated_at) for item in raw_moves
+        _move(
+            item,
+            target_root,
+            started_at,
+            updated_at,
+            schema_version=version,
+        )
+        for item in raw_moves
     )
     if finished_at is not None and any(move.timestamp > finished_at for move in moves):
         raise ManifestFormatError("manifest move timestamp ordering is invalid")
@@ -214,9 +260,15 @@ def validate_manifest(
 
 
 def _move(
-    value: object, target_root: Path, started_at: datetime, updated_at: datetime
+    value: object,
+    target_root: Path,
+    started_at: datetime,
+    updated_at: datetime,
+    *,
+    schema_version: int,
 ) -> ManifestMove:
-    raw = _mapping(value, fields=_MOVE_FIELDS, label="move")
+    fields = _MOVE_FIELDS_V1 if schema_version == 1 else _MOVE_FIELDS_V2
+    raw = _mapping(value, fields=fields, label="move")
     original = _absolute_canonical_path(raw["original_path"], label="original path")
     final = _absolute_canonical_path(raw["final_path"], label="final path")
     if (
@@ -235,6 +287,7 @@ def _move(
     timestamp = _timestamp(raw["timestamp"], label="move timestamp")
     if timestamp < started_at or timestamp > updated_at:
         raise ManifestFormatError("manifest move timestamp ordering is invalid")
+
     error_value = raw["error"]
     if status is MoveStatus.FAILED:
         error = _mapping(error_value, fields=_ERROR_FIELDS, label="move error")
@@ -249,8 +302,71 @@ def _move(
         if error_value is not None:
             raise ManifestFormatError("manifest move error is contradictory")
         error_type = error_message = None
+
+    identity = None
+    if schema_version == 2:
+        identity_value = raw["identity"]
+        if status is MoveStatus.COMPLETED:
+            if identity_value is None:
+                raise ManifestFormatError("manifest move identity is contradictory")
+            identity = _identity(
+                identity_value,
+                started_at=started_at,
+                updated_at=updated_at,
+                move_timestamp=timestamp,
+            )
+        elif identity_value is not None:
+            raise ManifestFormatError("manifest move identity is contradictory")
+
     return ManifestMove(
-        original, final, category, status, timestamp, error_type, error_message
+        original,
+        final,
+        category,
+        status,
+        timestamp,
+        error_type,
+        error_message,
+        identity,
+    )
+
+
+def _identity(
+    value: object,
+    *,
+    started_at: datetime,
+    updated_at: datetime,
+    move_timestamp: datetime,
+) -> IdentityEvidence:
+    raw = _mapping(value, fields=_IDENTITY_FIELDS, label="move identity")
+    algorithm = raw["algorithm"]
+    digest = raw["digest"]
+    if algorithm != "sha256":
+        raise ManifestFormatError("manifest move identity algorithm is invalid")
+    if not isinstance(digest, str) or _SHA256_HEX.fullmatch(digest) is None:
+        raise ManifestFormatError("manifest move identity digest is invalid")
+    size_bytes = _integer(raw["size_bytes"], label="move identity size")
+    source_observed_at = _timestamp(
+        raw["source_observed_at"], label="source observation timestamp"
+    )
+    destination_observed_at = _timestamp(
+        raw["destination_observed_at"], label="destination observation timestamp"
+    )
+    if (
+        source_observed_at < started_at
+        or source_observed_at > updated_at
+        or destination_observed_at < source_observed_at
+        or destination_observed_at > updated_at
+        or move_timestamp < destination_observed_at
+    ):
+        raise ManifestFormatError(
+            "manifest move identity timestamp ordering is invalid"
+        )
+    return IdentityEvidence(
+        algorithm=algorithm,
+        digest=digest,
+        size_bytes=size_bytes,
+        source_observed_at=source_observed_at,
+        destination_observed_at=destination_observed_at,
     )
 
 

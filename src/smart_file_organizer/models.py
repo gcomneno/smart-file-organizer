@@ -167,6 +167,17 @@ class PlannedMove:
     )
 
 
+@dataclass(frozen=True, slots=True)
+class IdentityEvidence:
+    """Complete historical payload identity evidence for one v2 completed move."""
+
+    algorithm: str
+    digest: str
+    size_bytes: int
+    source_observed_at: datetime
+    destination_observed_at: datetime
+
+
 @dataclass(frozen=True)
 class MoveExecutionRecord:
     """Truthful outcome and recovery evidence for one planned move."""
@@ -178,6 +189,7 @@ class MoveExecutionRecord:
     timestamp: datetime
     error_type: str | None = None
     error_message: str | None = None
+    identity: IdentityEvidence | None = None
 
 
 @dataclass(frozen=True)
