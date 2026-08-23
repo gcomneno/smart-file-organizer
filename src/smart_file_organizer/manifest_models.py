@@ -7,7 +7,7 @@ from enum import StrEnum
 from pathlib import Path
 from types import MappingProxyType
 
-from smart_file_organizer.models import FileCategory, MoveStatus
+from smart_file_organizer.models import FileCategory, IdentityEvidence, MoveStatus
 
 
 class ManifestReferenceStatus(StrEnum):
@@ -42,7 +42,7 @@ class RecoveryDisposition(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class ManifestCounts:
-    """Durable counts recorded by the v1 writer."""
+    """Durable counts recorded by a supported manifest writer."""
 
     completed: int
     failed: int
@@ -70,11 +70,12 @@ class ManifestMove:
     timestamp: datetime
     error_type: str | None = None
     error_message: str | None = None
+    identity: IdentityEvidence | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class ApplyManifest:
-    """Validated schema-v1 evidence from one past apply operation."""
+    """Validated historical evidence from one supported apply manifest."""
 
     path: Path
     schema_version: int
