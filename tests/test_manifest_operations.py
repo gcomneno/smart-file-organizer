@@ -1,5 +1,6 @@
 """Behavioral contracts for strict historical-manifest operations."""
 
+import hashlib
 import json
 import os
 from collections.abc import Iterable
@@ -14,6 +15,9 @@ import smart_file_organizer.execution as execution_module
 from smart_file_organizer import cli
 from smart_file_organizer.errors import ManifestFormatError, ManifestPathError
 from smart_file_organizer.manifest_models import (
+    IdentityObservationStatus,
+    IdentityVerificationReason,
+    IdentityVerificationState,
     RecoveryDisposition,
     ReconciliationState,
 )
@@ -24,9 +28,12 @@ from smart_file_organizer.models import (
     PlannedMove,
 )
 from smart_file_organizer import manifest_store
+from smart_file_organizer import manifest_verification as manifest_verification_module
+from smart_file_organizer import payload_identity as payload_identity_module
 from smart_file_organizer.manifest_verification import _Observation, _observe, _state
 from smart_file_organizer.manifest_store import ManifestStore
 from smart_file_organizer.manifest_verification import verify_manifest
+from smart_file_organizer.manifest_output import render_verification
 from smart_file_organizer.recovery_planning import plan_recovery
 
 
@@ -61,6 +68,43 @@ def _payload(target: Path, *, status: str = "completed") -> dict[str, Any]:
     }
 
 
+def _payload_v2(target: Path, content: bytes) -> dict[str, Any]:
+    timestamp = datetime.now(timezone.utc).isoformat()
+    source = target.parent / "source.txt"
+    destination = target / "documents" / "source.txt"
+    return {
+        "schema_version": 2,
+        "state": "completed",
+        "target_root": str(target),
+        "started_at": timestamp,
+        "updated_at": timestamp,
+        "finished_at": timestamp,
+        "counts": {
+            "completed": 1,
+            "failed": 0,
+            "in_progress": 0,
+            "unattempted": 0,
+        },
+        "moves": [
+            {
+                "original_path": str(source),
+                "final_path": str(destination),
+                "category": "documents",
+                "status": "completed",
+                "timestamp": timestamp,
+                "error": None,
+                "identity": {
+                    "algorithm": "sha256",
+                    "digest": hashlib.sha256(content).hexdigest(),
+                    "size_bytes": len(content),
+                    "source_observed_at": timestamp,
+                    "destination_observed_at": timestamp,
+                },
+            }
+        ],
+    }
+
+
 def _write_manifest(
     target: Path,
     payload: dict[str, Any],
@@ -71,6 +115,15 @@ def _write_manifest(
     path = directory / name
     path.write_text(json.dumps(payload), encoding="utf-8")
     return path
+
+
+def _verify_payload(target: Path, payload: dict[str, Any]):
+    path = _write_manifest(target, payload)
+    return verify_manifest(
+        ManifestStore(schema_version=execution_module.MANIFEST_SCHEMA_VERSION).load(
+            path
+        )
+    )
 
 
 def test_load_verify_and_plan_completed_manifest(tmp_path: Path) -> None:
@@ -91,6 +144,362 @@ def test_load_verify_and_plan_completed_manifest(tmp_path: Path) -> None:
     assert recovery.items[0].disposition is RecoveryDisposition.PROPOSED
     assert recovery.items[0].recovery_source == destination
     assert recovery.items[0].recovery_destination == source
+
+
+def test_v1_completed_identity_is_unverifiable_without_current_fingerprint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = tmp_path / "target"
+    payload = _payload(target)
+    destination = Path(payload["moves"][0]["final_path"])
+    destination.parent.mkdir(parents=True)
+    destination.write_bytes(b"current")
+
+    def unexpected_fingerprint(path: Path):
+        raise AssertionError(f"v1 verification fingerprinted {path}")
+
+    monkeypatch.setattr(
+        manifest_verification_module,
+        "_fingerprint_regular_file",
+        unexpected_fingerprint,
+    )
+
+    identity = _verify_payload(target, payload).moves[0].identity
+
+    assert identity.state is IdentityVerificationState.IDENTITY_UNVERIFIABLE
+    assert identity.reason is IdentityVerificationReason.HISTORICAL_IDENTITY_ABSENT
+    assert identity.current.status is IdentityObservationStatus.NOT_OBSERVED
+
+
+def test_v2_non_completed_identity_is_unverifiable_without_current_fingerprint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = tmp_path / "target"
+    payload = _payload_v2(target, b"current")
+    payload["state"] = "failed"
+    payload["counts"] = {
+        "completed": 0,
+        "failed": 1,
+        "in_progress": 0,
+        "unattempted": 0,
+    }
+    payload["moves"][0]["status"] = "failed"
+    payload["moves"][0]["error"] = {"type": "PermissionError", "message": "denied"}
+    payload["moves"][0]["identity"] = None
+    destination = Path(payload["moves"][0]["final_path"])
+    destination.parent.mkdir(parents=True)
+    destination.write_bytes(b"current")
+
+    def unexpected_fingerprint(path: Path):
+        raise AssertionError(f"non-completed v2 verification fingerprinted {path}")
+
+    monkeypatch.setattr(
+        manifest_verification_module,
+        "_fingerprint_regular_file",
+        unexpected_fingerprint,
+    )
+
+    identity = _verify_payload(target, payload).moves[0].identity
+
+    assert identity.state is IdentityVerificationState.IDENTITY_UNVERIFIABLE
+    assert identity.reason is IdentityVerificationReason.HISTORICAL_IDENTITY_ABSENT
+    assert identity.current.status is IdentityObservationStatus.NOT_OBSERVED
+
+
+def test_v2_completed_unchanged_bytes_match(tmp_path: Path) -> None:
+    content = b"current"
+    target = tmp_path / "target"
+    payload = _payload_v2(target, content)
+    destination = Path(payload["moves"][0]["final_path"])
+    destination.parent.mkdir(parents=True)
+    destination.write_bytes(content)
+
+    identity = _verify_payload(target, payload).moves[0].identity
+
+    assert identity.state is IdentityVerificationState.IDENTITY_MATCH
+    assert identity.reason is IdentityVerificationReason.IDENTITY_VERIFIED
+    assert identity.current.status is IdentityObservationStatus.FINGERPRINTED
+    assert identity.current.algorithm == "sha256"
+    assert identity.current.digest == hashlib.sha256(content).hexdigest()
+    assert identity.current.size_bytes == len(content)
+    assert identity.current.observed_at is not None
+
+
+def test_v2_metadata_only_changes_remain_identity_match(tmp_path: Path) -> None:
+    content = b"metadata-stable"
+    target = tmp_path / "target"
+    payload = _payload_v2(target, content)
+    destination = Path(payload["moves"][0]["final_path"])
+    destination.parent.mkdir(parents=True)
+    destination.write_bytes(content)
+    os.utime(destination, (1, 1))
+    destination.chmod(0o600)
+
+    identity = _verify_payload(target, payload).moves[0].identity
+
+    assert identity.state is IdentityVerificationState.IDENTITY_MATCH
+
+
+def test_v2_same_size_different_bytes_are_identity_mismatch(tmp_path: Path) -> None:
+    target = tmp_path / "target"
+    payload = _payload_v2(target, b"abc")
+    destination = Path(payload["moves"][0]["final_path"])
+    destination.parent.mkdir(parents=True)
+    destination.write_bytes(b"xyz")
+
+    identity = _verify_payload(target, payload).moves[0].identity
+
+    assert identity.state is IdentityVerificationState.IDENTITY_MISMATCH
+    assert identity.reason is IdentityVerificationReason.DESTINATION_CHANGED
+    assert identity.current.size_bytes == 3
+
+
+def test_v2_changed_size_is_identity_mismatch(tmp_path: Path) -> None:
+    target = tmp_path / "target"
+    payload = _payload_v2(target, b"abc")
+    destination = Path(payload["moves"][0]["final_path"])
+    destination.parent.mkdir(parents=True)
+    destination.write_bytes(b"abcd")
+
+    identity = _verify_payload(target, payload).moves[0].identity
+
+    assert identity.state is IdentityVerificationState.IDENTITY_MISMATCH
+    assert identity.reason is IdentityVerificationReason.DESTINATION_CHANGED
+    assert identity.current.size_bytes == 4
+
+
+def test_v2_missing_final_path_is_identity_unverifiable(tmp_path: Path) -> None:
+    target = tmp_path / "target"
+    payload = _payload_v2(target, b"current")
+
+    identity = _verify_payload(target, payload).moves[0].identity
+
+    assert identity.state is IdentityVerificationState.IDENTITY_UNVERIFIABLE
+    assert identity.reason is IdentityVerificationReason.DESTINATION_MISSING
+    assert identity.current.status is IdentityObservationStatus.MISSING
+
+
+def test_v2_final_path_symlink_is_not_dereferenced(tmp_path: Path) -> None:
+    content = b"current"
+    target = tmp_path / "target"
+    payload = _payload_v2(target, content)
+    destination = Path(payload["moves"][0]["final_path"])
+    destination.parent.mkdir(parents=True)
+    referent = tmp_path / "referent.txt"
+    referent.write_bytes(content)
+    destination.symlink_to(referent)
+
+    verification = _verify_payload(target, payload)
+    identity = verification.moves[0].identity
+
+    assert verification.moves[0].state is ReconciliationState.UNSAFE_PATH
+    assert identity.state is IdentityVerificationState.IDENTITY_UNVERIFIABLE
+    assert identity.reason is IdentityVerificationReason.UNSUPPORTED_FILE_TYPE
+    assert identity.current.status is IdentityObservationStatus.UNSUPPORTED_FILE_TYPE
+
+
+def test_v2_directory_final_path_is_identity_unverifiable(tmp_path: Path) -> None:
+    target = tmp_path / "target"
+    payload = _payload_v2(target, b"current")
+    destination = Path(payload["moves"][0]["final_path"])
+    destination.mkdir(parents=True)
+
+    verification = _verify_payload(target, payload)
+    identity = verification.moves[0].identity
+
+    assert verification.moves[0].state is ReconciliationState.UNSAFE_PATH
+    assert identity.state is IdentityVerificationState.IDENTITY_UNVERIFIABLE
+    assert identity.reason is IdentityVerificationReason.UNSUPPORTED_FILE_TYPE
+
+
+def test_v2_fifo_final_path_is_identity_unverifiable(tmp_path: Path) -> None:
+    target = tmp_path / "target"
+    payload = _payload_v2(target, b"current")
+    destination = Path(payload["moves"][0]["final_path"])
+    destination.parent.mkdir(parents=True)
+    os.mkfifo(destination)
+
+    verification = _verify_payload(target, payload)
+    identity = verification.moves[0].identity
+
+    assert verification.moves[0].state is ReconciliationState.UNSAFE_PATH
+    assert identity.state is IdentityVerificationState.IDENTITY_UNVERIFIABLE
+    assert identity.reason is IdentityVerificationReason.UNSUPPORTED_FILE_TYPE
+
+
+def test_fingerprint_refuses_fifo_replacement_before_open_without_blocking(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    if not hasattr(os, "mkfifo") or not hasattr(os, "O_NONBLOCK"):
+        pytest.skip("FIFO nonblocking-open regression requires POSIX O_NONBLOCK")
+    path = tmp_path / "payload.txt"
+    path.write_bytes(b"payload")
+    original_open = payload_identity_module.os.open
+    replaced = False
+
+    def replace_regular_file_with_fifo_before_open(
+        name: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+        flags: int,
+        mode: int = 0o777,
+        *,
+        dir_fd: int | None = None,
+    ) -> int:
+        nonlocal replaced
+        if os.fspath(name) == os.fspath(path) and not replaced:
+            replaced = True
+            path.unlink()
+            os.mkfifo(path)
+            assert flags & os.O_NONBLOCK
+        return original_open(name, flags, mode, dir_fd=dir_fd)
+
+    monkeypatch.setattr(
+        payload_identity_module.os,
+        "open",
+        replace_regular_file_with_fifo_before_open,
+    )
+
+    with pytest.raises(OSError, match="not a regular file|changed during observation"):
+        payload_identity_module._fingerprint_regular_file(path)
+
+    assert replaced
+
+
+def test_v2_identity_revalidates_parent_topology_before_fingerprinting(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    content = b"current"
+    target = tmp_path / "target"
+    payload = _payload_v2(target, content)
+    destination = Path(payload["moves"][0]["final_path"])
+    destination.parent.mkdir(parents=True)
+    destination.write_bytes(content)
+    manifest = ManifestStore(schema_version=2).load(_write_manifest(target, payload))
+    original_observe = manifest_verification_module._observe
+    fingerprinted: list[Path] = []
+    replaced = False
+
+    def replace_parent_after_first_destination_observation(path: Path) -> _Observation:
+        nonlocal replaced
+        observation = original_observe(path)
+        if path == destination and not replaced:
+            replaced = True
+            replacement = target / "moved-documents"
+            destination.parent.rename(replacement)
+            destination.parent.symlink_to(replacement, target_is_directory=True)
+        return observation
+
+    real_fingerprint = manifest_verification_module._fingerprint_regular_file
+
+    def recording_fingerprint(path: Path):
+        fingerprinted.append(path)
+        return real_fingerprint(path)
+
+    monkeypatch.setattr(
+        manifest_verification_module,
+        "_observe",
+        replace_parent_after_first_destination_observation,
+    )
+    monkeypatch.setattr(
+        manifest_verification_module,
+        "_fingerprint_regular_file",
+        recording_fingerprint,
+    )
+
+    verification = verify_manifest(manifest)
+    identity = verification.moves[0].identity
+
+    assert replaced
+    assert fingerprinted == []
+    assert identity.state is IdentityVerificationState.IDENTITY_UNVERIFIABLE
+    assert identity.reason is IdentityVerificationReason.UNSAFE_PATH
+    assert identity.current.status is IdentityObservationStatus.UNSAFE_PATH
+
+
+def test_v2_fingerprint_failure_is_identity_unverifiable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = tmp_path / "target"
+    payload = _payload_v2(target, b"current")
+    destination = Path(payload["moves"][0]["final_path"])
+    destination.parent.mkdir(parents=True)
+    destination.write_bytes(b"current")
+
+    def fail_fingerprint(path: Path):
+        raise PermissionError(f"cannot read {path}")
+
+    monkeypatch.setattr(
+        manifest_verification_module,
+        "_fingerprint_regular_file",
+        fail_fingerprint,
+    )
+
+    identity = _verify_payload(target, payload).moves[0].identity
+
+    assert identity.state is IdentityVerificationState.IDENTITY_UNVERIFIABLE
+    assert identity.reason is IdentityVerificationReason.OBSERVATION_FAILED
+    assert identity.current.status is IdentityObservationStatus.OBSERVATION_FAILED
+
+
+def test_v2_identity_verification_does_not_mutate_manifest_or_payload(
+    tmp_path: Path,
+) -> None:
+    content = b"current"
+    target = tmp_path / "target"
+    payload = _payload_v2(target, content)
+    destination = Path(payload["moves"][0]["final_path"])
+    destination.parent.mkdir(parents=True)
+    destination.write_bytes(content)
+    path = _write_manifest(target, payload)
+    manifest_bytes = path.read_bytes()
+    payload_bytes = destination.read_bytes()
+
+    verify_manifest(ManifestStore(schema_version=2).load(path))
+
+    assert path.read_bytes() == manifest_bytes
+    assert destination.read_bytes() == payload_bytes
+
+
+def test_verification_renders_deterministic_identity_output(tmp_path: Path) -> None:
+    content = b"current"
+    target = tmp_path / "target"
+    payload = _payload_v2(target, content)
+    destination = Path(payload["moves"][0]["final_path"])
+    destination.parent.mkdir(parents=True)
+    destination.write_bytes(content)
+    verification = _verify_payload(target, payload)
+
+    json_output = json.loads(render_verification(verification, json_output=True))
+    text_output = render_verification(verification, json_output=False)
+
+    identity_json = json_output["moves"][0]["identity"]
+    assert identity_json["state"] == "identity_match"
+    assert identity_json["reason"] == "identity_verified"
+    assert identity_json["current"]["status"] == "fingerprinted"
+    assert identity_json["current"]["algorithm"] == "sha256"
+    assert identity_json["current"]["digest"] == hashlib.sha256(content).hexdigest()
+    assert identity_json["current"]["size_bytes"] == len(content)
+    assert "identity=identity_match reason=identity_verified current=fingerprinted" in (
+        text_output
+    )
+
+
+def test_existing_recovery_planning_semantics_ignore_identity_mismatch(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "target"
+    payload = _payload_v2(target, b"old")
+    destination = Path(payload["moves"][0]["final_path"])
+    destination.parent.mkdir(parents=True)
+    destination.write_bytes(b"new")
+
+    verification = _verify_payload(target, payload)
+    recovery = plan_recovery(verification)
+
+    assert verification.moves[0].identity.state is (
+        IdentityVerificationState.IDENTITY_MISMATCH
+    )
+    assert verification.moves[0].state is ReconciliationState.CONSISTENT
+    assert recovery.items[0].disposition is RecoveryDisposition.PROPOSED
 
 
 def test_store_loads_interrupted_zero_move_manifest_from_current_writer(

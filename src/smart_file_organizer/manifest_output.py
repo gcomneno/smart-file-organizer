@@ -6,6 +6,7 @@ from smart_file_organizer.manifest_models import (
     ApplyManifest,
     ManifestReference,
     ManifestVerification,
+    MoveIdentityVerification,
     RecoveryPlan,
 )
 
@@ -81,6 +82,7 @@ def render_verification(
                 "state": result.state.value,
                 "source_exists": result.source_exists,
                 "destination_exists": result.destination_exists,
+                "identity": _identity_data(result.identity),
             }
             for result in verification.moves
         ],
@@ -91,7 +93,10 @@ def render_verification(
     if json_output:
         return _json(data)
     lines = [
-        f"- {result.state}: {result.move.original_path} -> {result.move.final_path}"
+        f"- {result.state}: {result.move.original_path} -> {result.move.final_path} "
+        f"[identity={result.identity.state.value} "
+        f"reason={result.identity.reason.value} "
+        f"current={result.identity.current.status.value}]"
         for result in verification.moves
     ]
     lines.append(
@@ -158,6 +163,22 @@ def _manifest_data(manifest: ApplyManifest) -> dict[str, object]:
             }
             for move in manifest.moves
         ],
+    }
+
+
+def _identity_data(identity: MoveIdentityVerification) -> dict[str, object]:
+    return {
+        "state": identity.state.value,
+        "reason": identity.reason.value,
+        "current": {
+            "status": identity.current.status.value,
+            "algorithm": identity.current.algorithm,
+            "digest": identity.current.digest,
+            "size_bytes": identity.current.size_bytes,
+            "observed_at": identity.current.observed_at.isoformat()
+            if identity.current.observed_at
+            else None,
+        },
     }
 
 
