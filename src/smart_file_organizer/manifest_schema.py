@@ -196,6 +196,7 @@ def validate_manifest(
     if (
         version not in _SUPPORTED_SCHEMA_VERSIONS
         or expected_version not in _SUPPORTED_SCHEMA_VERSIONS
+        or version > expected_version
     ):
         raise ManifestFormatError("manifest schema version is unsupported")
 
