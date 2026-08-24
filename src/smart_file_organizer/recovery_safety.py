@@ -216,6 +216,7 @@ def _source_restoration_path_available(observation: CurrentPathObservation) -> b
     return (
         observation.status is PathObservationStatus.MISSING
         and observation.leaf_exists is False
+        and observation.parent_missing is False
         and observation.parent_topology_safe is True
         and observation.containment_safe is not False
     )

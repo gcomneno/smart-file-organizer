@@ -389,7 +389,7 @@ def test_safety_or_containment_not_demonstrated_refuses() -> None:
     )
 
 
-def test_missing_parent_component_can_still_classify_safe() -> None:
+def test_missing_parent_component_refuses_as_safety_not_demonstrated() -> None:
     reconciliation = _reconciliation(
         source_observation=_path_observation(
             path=Path("/missing-parent/source.txt"),
@@ -401,9 +401,10 @@ def test_missing_parent_component_can_still_classify_safe() -> None:
         )
     )
 
+    assert reconciliation.source_observation.parent_missing is True
     assert _decision(reconciliation) == (
-        RecoverySafetyState.SAFE_TO_RECOVER,
-        RecoverySafetyReason.RECOVERY_PRECONDITIONS_VERIFIED,
+        RecoverySafetyState.REFUSED,
+        RecoverySafetyReason.SAFETY_NOT_DEMONSTRATED,
     )
 
 
@@ -501,7 +502,7 @@ def test_verify_manifest_records_recovery_path_observations(tmp_path: Path) -> N
     assert reconciliation.destination_observation.containment_safe is True
 
 
-def test_verify_manifest_records_missing_parent_component_as_classifiable(
+def test_verify_manifest_records_missing_parent_component_as_refused(
     tmp_path: Path,
 ) -> None:
     content = b"current"
@@ -525,7 +526,8 @@ def test_verify_manifest_records_missing_parent_component_as_classifiable(
     decision = classify_recovery_safety(verification).decisions[0]
 
     assert verification.moves[0].source_observation.parent_missing is True
-    assert decision.state is RecoverySafetyState.SAFE_TO_RECOVER
+    assert decision.state is RecoverySafetyState.REFUSED
+    assert decision.reason is RecoverySafetyReason.SAFETY_NOT_DEMONSTRATED
 
 
 def test_verify_manifest_records_parent_observation_failure(
