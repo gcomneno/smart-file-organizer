@@ -2,11 +2,13 @@
 
 import stat
 from dataclasses import dataclass
+from dataclasses import replace
 from pathlib import Path
 
 from smart_file_organizer.manifest_models import (
     ApplyManifest,
     CurrentIdentityObservation,
+    CurrentPathObservation,
     IdentityObservationStatus,
     IdentityVerificationReason,
     IdentityVerificationState,
@@ -14,6 +16,7 @@ from smart_file_organizer.manifest_models import (
     ManifestVerification,
     MoveIdentityVerification,
     MoveReconciliation,
+    PathObservationStatus,
     ReconciliationState,
 )
 from smart_file_organizer.models import MoveStatus
@@ -29,6 +32,19 @@ class _Observation:
     path_unsafe: bool = False
     unsupported_file_type: bool = False
     observation_failed: bool = False
+    parent_topology_safe: bool | None = True
+    parent_missing: bool = False
+    containment_safe: bool | None = None
+
+    def to_path_observation(self, path: Path) -> CurrentPathObservation:
+        return CurrentPathObservation(
+            path=path,
+            status=_path_observation_status(self),
+            leaf_exists=self.exists,
+            parent_topology_safe=self.parent_topology_safe,
+            parent_missing=self.parent_missing,
+            containment_safe=self.containment_safe,
+        )
 
 
 def verify_manifest(manifest: ApplyManifest) -> ManifestVerification:
@@ -37,7 +53,11 @@ def verify_manifest(manifest: ApplyManifest) -> ManifestVerification:
     summary = {state: 0 for state in ReconciliationState}
     for move in manifest.moves:
         source = _observe(move.original_path)
-        destination = _observe(move.final_path)
+        destination = _with_containment(
+            _observe(move.final_path),
+            move.final_path,
+            manifest.target_root,
+        )
         state = _state(move.status, source, destination)
         identity = _identity(move, destination)
         summary[state] += 1
@@ -48,6 +68,8 @@ def verify_manifest(manifest: ApplyManifest) -> ManifestVerification:
                 source.exists,
                 destination.exists,
                 identity,
+                source.to_path_observation(move.original_path),
+                destination.to_path_observation(move.final_path),
             )
         )
     return ManifestVerification(manifest, tuple(results), summary)
@@ -55,16 +77,45 @@ def verify_manifest(manifest: ApplyManifest) -> ManifestVerification:
 
 def _observe(path: Path) -> _Observation:
     """Observe only regular files without treating broken links as absent."""
-    if _has_symlink_parent(path):
-        return _Observation(None, unsafe=True, path_unsafe=True)
+    parent = _observe_parent_topology(path)
+    if parent.unsafe:
+        return _Observation(
+            None,
+            unsafe=True,
+            path_unsafe=True,
+            parent_topology_safe=False,
+            parent_missing=parent.missing,
+        )
+    if parent.observation_failed:
+        return _Observation(
+            None,
+            observation_failed=True,
+            parent_topology_safe=None,
+            parent_missing=parent.missing,
+        )
     try:
         info = path.lstat()
     except FileNotFoundError:
-        return _Observation(False)
+        return _Observation(
+            False,
+            parent_topology_safe=True,
+            parent_missing=parent.missing,
+        )
     except OSError:
-        return _Observation(None, observation_failed=True)
+        return _Observation(
+            None,
+            observation_failed=True,
+            parent_topology_safe=True,
+            parent_missing=parent.missing,
+        )
     except ValueError:
-        return _Observation(None, unsafe=True, path_unsafe=True)
+        return _Observation(
+            None,
+            unsafe=True,
+            path_unsafe=True,
+            parent_topology_safe=False,
+            parent_missing=parent.missing,
+        )
     is_regular = stat.S_ISREG(info.st_mode)
     return _Observation(
         True,
@@ -72,25 +123,74 @@ def _observe(path: Path) -> _Observation:
         is_directory=stat.S_ISDIR(info.st_mode),
         is_symlink=stat.S_ISLNK(info.st_mode),
         unsupported_file_type=not is_regular,
+        parent_topology_safe=True,
+        parent_missing=parent.missing,
     )
 
 
-def _has_symlink_parent(path: Path) -> bool:
+def _with_containment(
+    observation: _Observation, path: Path, root: Path
+) -> _Observation:
+    containment_safe = _containment_safe(path, root)
+    if containment_safe is False:
+        return replace(
+            observation,
+            exists=None,
+            unsafe=True,
+            path_unsafe=True,
+            containment_safe=False,
+        )
+    return replace(observation, containment_safe=containment_safe)
+
+
+@dataclass(frozen=True, slots=True)
+class _ParentTopology:
+    unsafe: bool = False
+    observation_failed: bool = False
+    missing: bool = False
+
+
+def _observe_parent_topology(path: Path) -> _ParentTopology:
     current = path.parent
+    missing = False
     while current != current.parent:
         try:
             info = current.lstat()
         except FileNotFoundError:
+            missing = True
             current = current.parent
             continue
         except OSError:
-            return False
+            return _ParentTopology(observation_failed=True, missing=missing)
         except ValueError:
-            return True
-        if stat.S_ISLNK(info.st_mode):
-            return True
+            return _ParentTopology(unsafe=True, missing=missing)
+        if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+            return _ParentTopology(unsafe=True, missing=missing)
         current = current.parent
-    return False
+    return _ParentTopology(missing=missing)
+
+
+def _containment_safe(path: Path, root: Path | None) -> bool | None:
+    if root is None:
+        return None
+    try:
+        return path != root and path.is_relative_to(root)
+    except ValueError:
+        return False
+
+
+def _path_observation_status(observation: _Observation) -> PathObservationStatus:
+    if observation.unsupported_file_type:
+        return PathObservationStatus.UNSUPPORTED_FILE_TYPE
+    if observation.path_unsafe:
+        return PathObservationStatus.UNSAFE_PATH
+    if observation.observation_failed:
+        return PathObservationStatus.OBSERVATION_FAILED
+    if observation.exists is False:
+        return PathObservationStatus.MISSING
+    if observation.exists is True:
+        return PathObservationStatus.REGULAR_FILE
+    return PathObservationStatus.NOT_OBSERVED
 
 
 def _state(

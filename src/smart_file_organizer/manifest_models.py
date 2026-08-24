@@ -61,6 +61,17 @@ class IdentityVerificationReason(StrEnum):
     OBSERVATION_FAILED = "observation_failed"
 
 
+class PathObservationStatus(StrEnum):
+    """Current path observation status for internal recovery-safety decisions."""
+
+    NOT_OBSERVED = "not_observed"
+    REGULAR_FILE = "regular_file"
+    MISSING = "missing"
+    UNSAFE_PATH = "unsafe_path"
+    UNSUPPORTED_FILE_TYPE = "unsupported_file_type"
+    OBSERVATION_FAILED = "observation_failed"
+
+
 class RecoveryDisposition(StrEnum):
     """Read-only recovery decision for one manifest record."""
 
@@ -153,6 +164,18 @@ class MoveIdentityVerification:
     current: CurrentIdentityObservation
 
 
+@dataclass(frozen=True, slots=True)
+class CurrentPathObservation:
+    """Structured current path evidence captured during manifest verification."""
+
+    path: Path | None = None
+    status: PathObservationStatus = PathObservationStatus.NOT_OBSERVED
+    leaf_exists: bool | None = None
+    parent_topology_safe: bool | None = None
+    parent_missing: bool = False
+    containment_safe: bool | None = None
+
+
 def _default_identity_verification() -> MoveIdentityVerification:
     return MoveIdentityVerification(
         IdentityVerificationState.IDENTITY_UNVERIFIABLE,
@@ -171,6 +194,12 @@ class MoveReconciliation:
     destination_exists: bool | None
     identity: MoveIdentityVerification = field(
         default_factory=_default_identity_verification
+    )
+    source_observation: CurrentPathObservation = field(
+        default_factory=CurrentPathObservation
+    )
+    destination_observation: CurrentPathObservation = field(
+        default_factory=CurrentPathObservation
     )
 
 
