@@ -6,8 +6,12 @@ from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
 from types import MappingProxyType
+from typing import TYPE_CHECKING
 
 from smart_file_organizer.models import FileCategory, IdentityEvidence, MoveStatus
+
+if TYPE_CHECKING:
+    from smart_file_organizer.recovery_safety import RecoverySafetyDecision
 
 
 class ManifestReferenceStatus(StrEnum):
@@ -242,6 +246,7 @@ class RecoveryPlanItem:
     recovery_source: Path | None
     recovery_destination: Path | None
     reason: str
+    safety_decision: "RecoverySafetyDecision | None" = None
 
 
 @dataclass(frozen=True, slots=True)

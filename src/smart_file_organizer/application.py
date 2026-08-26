@@ -47,6 +47,7 @@ from smart_file_organizer.planning import (
     resolve_destination_conflicts,
 )
 from smart_file_organizer.recovery_planning import plan_recovery as _plan_recovery
+from smart_file_organizer.recovery_safety import classify_recovery_safety
 
 
 logger = logging.getLogger(__name__)
@@ -299,4 +300,6 @@ def verify_manifest(path: Path) -> ManifestVerification:
 
 def plan_recovery(path: Path) -> RecoveryPlan:
     """Build a non-mutating manual recovery plan for one manifest."""
-    return _plan_recovery(verify_manifest(path))
+    verification = verify_manifest(path)
+    classification = classify_recovery_safety(verification)
+    return _plan_recovery(classification)
