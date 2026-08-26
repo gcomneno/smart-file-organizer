@@ -1,6 +1,7 @@
 """Recovery-safety classification from historical and verified evidence."""
 
 import hashlib
+import os
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -26,7 +27,10 @@ from smart_file_organizer.manifest_models import (
 from smart_file_organizer.manifest_verification import verify_manifest
 from smart_file_organizer.models import FileCategory, IdentityEvidence, MoveStatus
 from smart_file_organizer.recovery_planning import plan_recovery
+from smart_file_organizer.recovery_planning import build_recovery_plan
 from smart_file_organizer.recovery_safety import (
+    RecoverySafetyClassification,
+    RecoverySafetyDecision,
     RecoverySafetyReason,
     RecoverySafetyState,
     classify_recovery_safety,
@@ -473,6 +477,163 @@ def test_classifier_performs_no_filesystem_access_hashing_or_mutation(
     assert marker.read_text(encoding="utf-8") == before
 
 
+def _safety_decision(
+    reconciliation: MoveReconciliation,
+    *,
+    state: RecoverySafetyState,
+    reason: RecoverySafetyReason,
+) -> RecoverySafetyDecision:
+    return RecoverySafetyDecision(
+        reconciliation,
+        state,
+        reason,
+        "structured safety explanation",
+    )
+
+
+def _classification(
+    *decisions: RecoverySafetyDecision,
+) -> RecoverySafetyClassification:
+    verification = _verification(
+        tuple(decision.reconciliation for decision in decisions)
+    )
+    return RecoverySafetyClassification(verification, decisions)
+
+
+def test_recovery_planner_maps_safe_to_recover_to_proposed() -> None:
+    reconciliation = _reconciliation()
+    decision = _safety_decision(
+        reconciliation,
+        state=RecoverySafetyState.SAFE_TO_RECOVER,
+        reason=RecoverySafetyReason.RECOVERY_PRECONDITIONS_VERIFIED,
+    )
+
+    plan = build_recovery_plan(_classification(decision))
+    item = plan.items[0]
+
+    assert item.disposition is RecoveryDisposition.PROPOSED
+    assert item.recovery_source == reconciliation.move.final_path
+    assert item.recovery_destination == reconciliation.move.original_path
+    assert item.reason == "recovery_preconditions_verified"
+    assert item.safety_decision is decision
+
+
+@pytest.mark.parametrize(
+    "reason",
+    (
+        RecoverySafetyReason.IDENTITY_UNVERIFIABLE,
+        RecoverySafetyReason.DESTINATION_CHANGED,
+        RecoverySafetyReason.SOURCE_CONFLICT,
+        RecoverySafetyReason.DESTINATION_MISSING,
+        RecoverySafetyReason.BOTH_PATHS_PRESENT,
+        RecoverySafetyReason.BOTH_PATHS_MISSING,
+        RecoverySafetyReason.UNSAFE_PATH,
+        RecoverySafetyReason.UNSUPPORTED_FILE_TYPE,
+        RecoverySafetyReason.OBSERVATION_FAILED,
+        RecoverySafetyReason.MANIFEST_PATH_CONFLICT,
+        RecoverySafetyReason.SAFETY_NOT_DEMONSTRATED,
+    ),
+)
+def test_recovery_planner_maps_refused_safety_to_refused(
+    reason: RecoverySafetyReason,
+) -> None:
+    reconciliation = _reconciliation()
+    decision = _safety_decision(
+        reconciliation,
+        state=RecoverySafetyState.REFUSED,
+        reason=reason,
+    )
+
+    item = build_recovery_plan(_classification(decision)).items[0]
+
+    assert item.disposition is RecoveryDisposition.REFUSED
+    assert item.recovery_source is None
+    assert item.recovery_destination is None
+    assert item.reason == reason.value
+    assert item.safety_decision is decision
+
+
+def test_recovery_planner_preserves_deterministic_decision_order() -> None:
+    first = _safety_decision(
+        _reconciliation(_move(original_path=Path("/b.txt"))),
+        state=RecoverySafetyState.REFUSED,
+        reason=RecoverySafetyReason.IDENTITY_UNVERIFIABLE,
+    )
+    second = _safety_decision(
+        _reconciliation(_move(original_path=Path("/a.txt"))),
+        state=RecoverySafetyState.SAFE_TO_RECOVER,
+        reason=RecoverySafetyReason.RECOVERY_PRECONDITIONS_VERIFIED,
+    )
+
+    plan = build_recovery_plan(_classification(first, second))
+
+    assert [item.move.original_path for item in plan.items] == [
+        Path("/b.txt"),
+        Path("/a.txt"),
+    ]
+
+
+def test_recovery_planner_fails_closed_for_misaligned_classification() -> None:
+    first = _reconciliation(_move(original_path=Path("/first.txt")))
+    second = _reconciliation(_move(original_path=Path("/second.txt")))
+    verification = _verification((first,))
+    classification = RecoverySafetyClassification(
+        verification,
+        (
+            _safety_decision(
+                second,
+                state=RecoverySafetyState.SAFE_TO_RECOVER,
+                reason=RecoverySafetyReason.RECOVERY_PRECONDITIONS_VERIFIED,
+            ),
+        ),
+    )
+
+    with pytest.raises(ValueError, match="malformed or misaligned"):
+        build_recovery_plan(classification)
+
+
+def test_recovery_planner_fails_closed_for_malformed_cardinality() -> None:
+    reconciliation = _reconciliation()
+    verification = _verification((reconciliation,))
+    classification = RecoverySafetyClassification(verification, ())
+
+    with pytest.raises(ValueError, match="malformed or misaligned"):
+        build_recovery_plan(classification)
+
+
+def test_recovery_planner_performs_no_filesystem_access_hashing_or_mutation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    marker = tmp_path / "marker.txt"
+    marker.write_text("unchanged", encoding="utf-8")
+    before = marker.read_text(encoding="utf-8")
+    decision = _safety_decision(
+        _reconciliation(),
+        state=RecoverySafetyState.SAFE_TO_RECOVER,
+        reason=RecoverySafetyReason.RECOVERY_PRECONDITIONS_VERIFIED,
+    )
+
+    def forbidden(*_args: object, **_kwargs: object) -> object:
+        pytest.fail("planner attempted filesystem access, hashing, or mutation")
+
+    with monkeypatch.context() as patched:
+        patched.setattr(Path, "lstat", forbidden)
+        patched.setattr(Path, "stat", forbidden)
+        patched.setattr(Path, "open", forbidden)
+        patched.setattr(Path, "write_text", forbidden)
+        patched.setattr(Path, "write_bytes", forbidden)
+        patched.setattr(Path, "rename", forbidden)
+        patched.setattr(Path, "replace", forbidden)
+        patched.setattr(Path, "unlink", forbidden)
+        patched.setattr(os.path, "lexists", forbidden)
+        patched.setattr(hashlib, "sha256", forbidden)
+
+        plan = build_recovery_plan(_classification(decision))
+
+    assert plan.items[0].disposition is RecoveryDisposition.PROPOSED
+    assert marker.read_text(encoding="utf-8") == before
+
+
 def test_verify_manifest_records_recovery_path_observations(tmp_path: Path) -> None:
     content = b"current"
     target = tmp_path / "target"
@@ -559,7 +720,7 @@ def test_verify_manifest_records_parent_observation_failure(
     assert decision.reason is RecoverySafetyReason.OBSERVATION_FAILED
 
 
-def test_existing_recovery_planning_still_ignores_identity_mismatch(
+def test_recovery_planning_refuses_identity_mismatch(
     tmp_path: Path,
 ) -> None:
     source = tmp_path / "source.txt"
@@ -577,6 +738,9 @@ def test_existing_recovery_planning_still_ignores_identity_mismatch(
     verification = _verification((reconciliation,))
     verification = replace(verification, manifest=_manifest((move,)))
 
-    recovery = plan_recovery(verification)
+    classification = classify_recovery_safety(verification)
+    recovery = plan_recovery(classification)
 
-    assert recovery.items[0].disposition is RecoveryDisposition.PROPOSED
+    assert recovery.items[0].disposition is RecoveryDisposition.REFUSED
+    assert recovery.items[0].reason == "destination_changed"
+    assert recovery.items[0].safety_decision is classification.decisions[0]

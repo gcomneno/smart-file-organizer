@@ -35,6 +35,7 @@ from smart_file_organizer.manifest_store import ManifestStore
 from smart_file_organizer.manifest_verification import verify_manifest
 from smart_file_organizer.manifest_output import render_verification
 from smart_file_organizer.recovery_planning import plan_recovery
+from smart_file_organizer.recovery_safety import classify_recovery_safety
 
 
 def _payload(target: Path, *, status: str = "completed") -> dict[str, Any]:
@@ -126,6 +127,10 @@ def _verify_payload(target: Path, payload: dict[str, Any]):
     )
 
 
+def _plan_from_verification(verification: Any):
+    return plan_recovery(classify_recovery_safety(verification))
+
+
 def test_load_verify_and_plan_completed_manifest(tmp_path: Path) -> None:
     target = tmp_path / "target"
     payload = _payload(target)
@@ -137,13 +142,14 @@ def test_load_verify_and_plan_completed_manifest(tmp_path: Path) -> None:
 
     manifest = ManifestStore(schema_version=1).load(path)
     verification = verify_manifest(manifest)
-    recovery = plan_recovery(verification)
+    recovery = _plan_from_verification(verification)
 
     assert not os.path.lexists(source)
     assert verification.moves[0].state is ReconciliationState.CONSISTENT
-    assert recovery.items[0].disposition is RecoveryDisposition.PROPOSED
-    assert recovery.items[0].recovery_source == destination
-    assert recovery.items[0].recovery_destination == source
+    assert recovery.items[0].disposition is RecoveryDisposition.REFUSED
+    assert recovery.items[0].reason == "identity_unverifiable"
+    assert recovery.items[0].recovery_source is None
+    assert recovery.items[0].recovery_destination is None
 
 
 def test_v1_completed_identity_is_unverifiable_without_current_fingerprint(
@@ -483,7 +489,7 @@ def test_verification_renders_deterministic_identity_output(tmp_path: Path) -> N
     )
 
 
-def test_existing_recovery_planning_semantics_ignore_identity_mismatch(
+def test_recovery_planning_refuses_identity_mismatch(
     tmp_path: Path,
 ) -> None:
     target = tmp_path / "target"
@@ -493,13 +499,14 @@ def test_existing_recovery_planning_semantics_ignore_identity_mismatch(
     destination.write_bytes(b"new")
 
     verification = _verify_payload(target, payload)
-    recovery = plan_recovery(verification)
+    recovery = _plan_from_verification(verification)
 
     assert verification.moves[0].identity.state is (
         IdentityVerificationState.IDENTITY_MISMATCH
     )
     assert verification.moves[0].state is ReconciliationState.CONSISTENT
-    assert recovery.items[0].disposition is RecoveryDisposition.PROPOSED
+    assert recovery.items[0].disposition is RecoveryDisposition.REFUSED
+    assert recovery.items[0].reason == "destination_changed"
 
 
 def test_store_loads_interrupted_zero_move_manifest_from_current_writer(
@@ -866,13 +873,15 @@ def test_recovery_refuses_ambiguous_or_restored_files(tmp_path: Path) -> None:
     destination.write_text("copy", encoding="utf-8")
     path = _write_manifest(target, payload)
 
-    plan = plan_recovery(verify_manifest(ManifestStore(schema_version=1).load(path)))
+    plan = _plan_from_verification(
+        verify_manifest(ManifestStore(schema_version=1).load(path))
+    )
 
     assert plan.items[0].disposition is RecoveryDisposition.REFUSED
     assert plan.items[0].reconciliation.state is ReconciliationState.BOTH_PRESENT
 
 
-def test_recovery_marks_parent_symlink_created_after_verification_as_unsafe(
+def test_recovery_planning_does_not_reobserve_destination_parent(
     tmp_path: Path,
 ) -> None:
     target = tmp_path / "target"
@@ -890,13 +899,13 @@ def test_recovery_marks_parent_symlink_created_after_verification_as_unsafe(
     source_parent.rename(moved_parent)
     source_parent.symlink_to(moved_parent, target_is_directory=True)
 
-    recovery = plan_recovery(verification)
+    recovery = _plan_from_verification(verification)
 
-    assert recovery.items[0].disposition is RecoveryDisposition.UNSAFE
-    assert recovery.items[0].reason == "recovery destination parent is unsafe"
+    assert recovery.items[0].disposition is RecoveryDisposition.REFUSED
+    assert recovery.items[0].reason == "identity_unverifiable"
 
 
-def test_recovery_rechecks_source_parent_after_verification(
+def test_recovery_planning_does_not_reobserve_source_parent(
     tmp_path: Path,
 ) -> None:
     target = tmp_path / "target"
@@ -911,13 +920,13 @@ def test_recovery_rechecks_source_parent_after_verification(
     destination.parent.rename(moved_parent)
     destination.parent.symlink_to(moved_parent, target_is_directory=True)
 
-    recovery = plan_recovery(verification)
+    recovery = _plan_from_verification(verification)
 
-    assert recovery.items[0].disposition is RecoveryDisposition.UNSAFE
-    assert recovery.items[0].reason == "recovery source parent is unsafe"
+    assert recovery.items[0].disposition is RecoveryDisposition.REFUSED
+    assert recovery.items[0].reason == "identity_unverifiable"
 
 
-def test_recovery_rejects_special_files_replacing_completed_destination(
+def test_recovery_planning_does_not_reobserve_replaced_destination(
     tmp_path: Path,
 ) -> None:
     target = tmp_path / "target"
@@ -931,10 +940,10 @@ def test_recovery_rejects_special_files_replacing_completed_destination(
     destination.unlink()
     os.mkfifo(destination)
 
-    recovery = plan_recovery(verification)
+    recovery = _plan_from_verification(verification)
 
-    assert recovery.items[0].disposition is RecoveryDisposition.UNSAFE
-    assert recovery.items[0].reason == "recovery source has an unsafe file type"
+    assert recovery.items[0].disposition is RecoveryDisposition.REFUSED
+    assert recovery.items[0].reason == "identity_unverifiable"
 
 
 def test_verification_marks_special_files_as_unsafe(tmp_path: Path) -> None:
@@ -1011,7 +1020,8 @@ def test_verification_marks_direct_unsafe_entries(
 
     assert verification.moves[0].state is ReconciliationState.UNSAFE_PATH
     assert (
-        plan_recovery(verification).items[0].disposition is RecoveryDisposition.UNSAFE
+        _plan_from_verification(verification).items[0].disposition
+        is RecoveryDisposition.REFUSED
     )
 
 
@@ -1131,10 +1141,10 @@ def test_public_model_with_nul_path_is_safe_to_verify_and_plan(tmp_path: Path) -
     )
 
     verification = verify_manifest(unsafe_manifest)
-    recovery = plan_recovery(verification)
+    recovery = _plan_from_verification(verification)
 
     assert verification.moves[0].state is ReconciliationState.UNSAFE_PATH
-    assert recovery.items[0].disposition is RecoveryDisposition.UNSAFE
+    assert recovery.items[0].disposition is RecoveryDisposition.REFUSED
 
 
 def test_verification_and_recovery_planning_do_not_mutate_filesystem(
@@ -1151,7 +1161,7 @@ def test_verification_and_recovery_planning_do_not_mutate_filesystem(
     destination_bytes = destination.read_bytes()
 
     verification = verify_manifest(ManifestStore(schema_version=1).load(path))
-    plan_recovery(verification)
+    _plan_from_verification(verification)
 
     assert not os.path.lexists(source)
     assert destination.read_bytes() == destination_bytes
