@@ -1,5 +1,8 @@
 import ast
-from dataclasses import FrozenInstanceError
+import hashlib
+import json
+from dataclasses import FrozenInstanceError, replace
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
 
@@ -10,15 +13,30 @@ from smart_file_organizer.application import (
     OrganizationPlan,
     OrganizationPlanConflictError,
     PlanOrganizationRequest,
+    RecoveryAssessment,
     apply_organization,
+    assess_recovery,
     plan_organization,
+    plan_recovery,
 )
 from smart_file_organizer.errors import DestinationExistsError, ManifestWriteError
+from smart_file_organizer.manifest_models import (
+    ApplyManifest,
+    ManifestCounts,
+    ManifestVerification,
+    RecoveryPlan,
+    RecoveryDisposition,
+)
 from smart_file_organizer.models import (
     ConflictStrategy,
     FileCategory,
     PlannedMove,
     TaxonomyProfileName,
+)
+from smart_file_organizer.recovery_safety import (
+    RecoverySafetyClassification,
+    RecoverySafetyReason,
+    RecoverySafetyState,
 )
 
 
@@ -77,6 +95,69 @@ def _move(source: Path, destination: Path) -> PlannedMove:
         source=source,
         destination=destination,
         category=FileCategory.DOCUMENTS,
+    )
+
+
+def _payload_v2(target: Path, content: bytes) -> dict[str, object]:
+    timestamp = datetime.now(timezone.utc).isoformat()
+    source = target.parent / "source.txt"
+    destination = target / "documents" / "source.txt"
+    return {
+        "schema_version": 2,
+        "state": "completed",
+        "target_root": str(target),
+        "started_at": timestamp,
+        "updated_at": timestamp,
+        "finished_at": timestamp,
+        "counts": {
+            "completed": 1,
+            "failed": 0,
+            "in_progress": 0,
+            "unattempted": 0,
+        },
+        "moves": [
+            {
+                "original_path": str(source),
+                "final_path": str(destination),
+                "category": "documents",
+                "status": "completed",
+                "timestamp": timestamp,
+                "error": None,
+                "identity": {
+                    "algorithm": "sha256",
+                    "digest": hashlib.sha256(content).hexdigest(),
+                    "size_bytes": len(content),
+                    "source_observed_at": timestamp,
+                    "destination_observed_at": timestamp,
+                },
+            }
+        ],
+    }
+
+
+def _write_manifest(target: Path, payload: dict[str, object]) -> Path:
+    directory = target / ".smart-file-organizer" / "manifests"
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / "apply-20260805T120000000000Z-0123456789ab.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return path
+
+
+def _first_payload_move(payload: dict[str, object]) -> dict[str, object]:
+    return cast(dict[str, object], cast(list[object], payload["moves"])[0])
+
+
+def _empty_manifest() -> ApplyManifest:
+    timestamp = datetime.now(timezone.utc)
+    return ApplyManifest(
+        path=Path("/target/.smart-file-organizer/manifests/apply.json"),
+        schema_version=2,
+        state="completed",
+        target_root=Path("/target"),
+        started_at=timestamp,
+        updated_at=timestamp,
+        finished_at=timestamp,
+        counts=ManifestCounts(0, 0, 0, 0),
     )
 
 
@@ -337,6 +418,176 @@ def test_empty_plan_applies_with_existing_zero_count_manifest(tmp_path: Path) ->
 
     assert result.completed_count == 0
     assert result.manifest_path.is_file()
+
+
+def test_assess_recovery_returns_immutable_proposed_v2_assessment(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "target"
+    payload = _payload_v2(target, b"current")
+    destination = Path(cast(str, _first_payload_move(payload)["final_path"]))
+    destination.parent.mkdir(parents=True)
+    destination.write_bytes(b"current")
+    manifest_path = _write_manifest(target, payload)
+
+    assessment = assess_recovery(manifest_path)
+
+    assert assessment.manifest is assessment.verification.manifest
+    assert assessment.safety_classification.verification is assessment.verification
+    assert assessment.plan.manifest is assessment.manifest
+    assert assessment.plan.verification is assessment.verification
+    assert assessment.safety_classification.decisions[0].state is (
+        RecoverySafetyState.SAFE_TO_RECOVER
+    )
+    assert assessment.plan.items[0].disposition is RecoveryDisposition.PROPOSED
+    assert (
+        assessment.plan.items[0].safety_decision
+        is (assessment.safety_classification.decisions[0])
+    )
+    assert hasattr(assessment, "__slots__")
+    with pytest.raises(FrozenInstanceError):
+        setattr(assessment, "plan", assessment.plan)
+
+
+def test_assess_recovery_returns_refused_v2_assessment_for_identity_mismatch(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "target"
+    payload = _payload_v2(target, b"historical")
+    move = _first_payload_move(payload)
+    destination = Path(cast(str, move["final_path"]))
+    destination.parent.mkdir(parents=True)
+    destination.write_bytes(b"changed")
+    manifest_path = _write_manifest(target, payload)
+
+    assessment = assess_recovery(manifest_path)
+
+    assert assessment.safety_classification.decisions[0].state is (
+        RecoverySafetyState.REFUSED
+    )
+    assert assessment.safety_classification.decisions[0].reason is (
+        RecoverySafetyReason.DESTINATION_CHANGED
+    )
+    assert assessment.plan.items[0].disposition is RecoveryDisposition.REFUSED
+
+
+def test_assess_recovery_uses_single_canonical_pipeline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = _empty_manifest()
+    verification = ManifestVerification(manifest, (), {})
+    classification = RecoverySafetyClassification(verification, ())
+    recovery_plan = RecoveryPlan(manifest, verification, ())
+    calls: list[str] = []
+
+    def fake_load_manifest(path: Path) -> ApplyManifest:
+        calls.append(f"load:{path}")
+        return manifest
+
+    def fake_verify_manifest(received: ApplyManifest) -> ManifestVerification:
+        calls.append("verify")
+        assert received is manifest
+        return verification
+
+    def fake_classify_recovery_safety(
+        received: ManifestVerification,
+    ) -> RecoverySafetyClassification:
+        calls.append("classify")
+        assert received is verification
+        return classification
+
+    def fake_plan_recovery(
+        received: RecoverySafetyClassification,
+    ) -> RecoveryPlan:
+        calls.append("plan")
+        assert received is classification
+        return recovery_plan
+
+    monkeypatch.setattr(application, "load_manifest", fake_load_manifest)
+    monkeypatch.setattr(application, "_verify_manifest", fake_verify_manifest)
+    monkeypatch.setattr(
+        application,
+        "classify_recovery_safety",
+        fake_classify_recovery_safety,
+    )
+    monkeypatch.setattr(application, "_plan_recovery", fake_plan_recovery)
+
+    assessment = assess_recovery(manifest.path)
+
+    assert assessment == RecoveryAssessment(
+        manifest,
+        verification,
+        classification,
+        recovery_plan,
+    )
+    assert calls == [f"load:{manifest.path}", "verify", "classify", "plan"]
+
+
+def test_recovery_assessment_fails_closed_for_contradictory_alignment(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "target"
+    payload = _payload_v2(target, b"current")
+    manifest_path = _write_manifest(target, payload)
+    manifest = application.load_manifest(manifest_path)
+    verification = ManifestVerification(manifest, (), {})
+    classification = RecoverySafetyClassification(verification, ())
+    other_manifest = replace(manifest, state="failed")
+    plan = application.RecoveryPlan(
+        other_manifest,
+        ManifestVerification(other_manifest, (), {}),
+        (),
+    )
+
+    with pytest.raises(ValueError, match="plan does not match manifest"):
+        RecoveryAssessment(manifest, verification, classification, plan)
+
+
+def test_recovery_assessment_fails_closed_for_plan_safety_contradiction(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "target"
+    payload = _payload_v2(target, b"current")
+    destination = Path(cast(str, _first_payload_move(payload)["final_path"]))
+    destination.parent.mkdir(parents=True)
+    destination.write_bytes(b"current")
+    manifest_path = _write_manifest(target, payload)
+    assessment = assess_recovery(manifest_path)
+    bad_item = replace(
+        assessment.plan.items[0],
+        disposition=RecoveryDisposition.REFUSED,
+        recovery_source=None,
+        recovery_destination=None,
+    )
+    bad_plan = replace(assessment.plan, items=(bad_item,))
+
+    with pytest.raises(ValueError, match="plan item is misaligned"):
+        RecoveryAssessment(
+            assessment.manifest,
+            assessment.verification,
+            assessment.safety_classification,
+            bad_plan,
+        )
+
+
+def test_plan_recovery_delegates_to_canonical_assessment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Assessment:
+        plan = object()
+
+    path = Path(
+        "/target/.smart-file-organizer/manifests/"
+        "apply-20260805T120000000000Z-0123456789ab.json"
+    )
+
+    def fake_assess_recovery(received: Path) -> _Assessment:
+        assert received == path
+        return _Assessment()
+
+    monkeypatch.setattr(application, "assess_recovery", fake_assess_recovery)
+
+    assert plan_recovery(path) is _Assessment.plan
 
 
 @pytest.mark.parametrize(

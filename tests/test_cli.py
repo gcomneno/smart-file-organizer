@@ -1,6 +1,9 @@
 import json
+import hashlib
 from collections.abc import Sequence
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -19,6 +22,7 @@ from smart_file_organizer.cli import (
 )
 from smart_file_organizer.core import FileCategory, PlannedMove
 from smart_file_organizer.errors import ManifestWriteError, SourceSelectionError
+from smart_file_organizer.manifest_models import RecoveryDisposition
 
 
 @pytest.fixture
@@ -65,6 +69,62 @@ def test_format_destination_conflicts() -> None:
         "destination conflicts detected:\n"
         "- organized/images/photo.jpg: folder-a/photo.jpg, folder-b/photo.jpg"
     )
+
+
+def _recovery_payload_v1(target: Path) -> dict[str, Any]:
+    timestamp = datetime.now(timezone.utc).isoformat()
+    source = target.parent / "source.txt"
+    destination = target / "documents" / "source.txt"
+    return {
+        "schema_version": 1,
+        "state": "completed",
+        "target_root": str(target),
+        "started_at": timestamp,
+        "updated_at": timestamp,
+        "finished_at": timestamp,
+        "counts": {
+            "completed": 1,
+            "failed": 0,
+            "in_progress": 0,
+            "unattempted": 0,
+        },
+        "moves": [
+            {
+                "original_path": str(source),
+                "final_path": str(destination),
+                "category": "documents",
+                "status": "completed",
+                "timestamp": timestamp,
+                "error": None,
+            }
+        ],
+    }
+
+
+def _recovery_payload_v2(target: Path, content: bytes) -> dict[str, Any]:
+    payload = _recovery_payload_v1(target)
+    timestamp = cast(str, payload["started_at"])
+    payload["schema_version"] = 2
+    cast(list[dict[str, Any]], payload["moves"])[0]["identity"] = {
+        "algorithm": "sha256",
+        "digest": hashlib.sha256(content).hexdigest(),
+        "size_bytes": len(content),
+        "source_observed_at": timestamp,
+        "destination_observed_at": timestamp,
+    }
+    return payload
+
+
+def _write_recovery_manifest(target: Path, payload: dict[str, Any]) -> Path:
+    directory = target / ".smart-file-organizer" / "manifests"
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / "apply-20260805T120000000000Z-0123456789ab.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return path
+
+
+def _first_recovery_move(payload: dict[str, Any]) -> dict[str, Any]:
+    return cast(list[dict[str, Any]], payload["moves"])[0]
 
 
 def test_main_maps_inspect_content_request_and_renders_application_plan(
@@ -1228,3 +1288,309 @@ def test_top_level_help_identifies_canonical_and_compatibility_syntax(
     assert captured.err == ""
     assert "Canonical usage: smart-file-organizer plan" in normalized
     assert "compatibility syntax" in normalized
+
+
+def test_recover_plan_text_separates_reconciliation_identity_safety_and_plan(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    target = tmp_path / "target"
+    content = b"current"
+    payload = _recovery_payload_v2(target, content)
+    destination = Path(_first_recovery_move(payload)["final_path"])
+    destination.parent.mkdir(parents=True)
+    destination.write_bytes(content)
+    manifest_path = _write_recovery_manifest(target, payload)
+
+    main(["recover", "plan", str(manifest_path)])
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    assert captured.out == (
+        f"- {tmp_path}/source.txt -> {destination}\n"
+        "  reconciliation: consistent\n"
+        "  identity: identity_match (identity_verified)\n"
+        "  safety: safe_to_recover (recovery_preconditions_verified) - "
+        "recovery preconditions are verified by historical evidence and current observations\n"
+        f"  plan: proposed {destination} -> {tmp_path}/source.txt\n"
+    )
+
+
+def test_recover_plan_refused_text_does_not_imply_mutation_authority(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    target = tmp_path / "target"
+    payload = _recovery_payload_v1(target)
+    destination = Path(_first_recovery_move(payload)["final_path"])
+    destination.parent.mkdir(parents=True)
+    destination.write_text("v1-current", encoding="utf-8")
+    manifest_path = _write_recovery_manifest(target, payload)
+
+    main(["recover", "plan", str(manifest_path)])
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    assert "identity: identity_unverifiable (historical_identity_absent)" in (
+        captured.out
+    )
+    assert "safety: refused (identity_unverifiable)" in captured.out
+    assert "plan: refused" in captured.out
+    assert "proposed" not in captured.out
+
+
+def test_recover_plan_json_schema_v1_for_proposed_assessment(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    target = tmp_path / "target"
+    content = b"private payload should not be emitted"
+    payload = _recovery_payload_v2(target, content)
+    destination = Path(_first_recovery_move(payload)["final_path"])
+    destination.parent.mkdir(parents=True)
+    destination.write_bytes(content)
+    manifest_path = _write_recovery_manifest(target, payload)
+
+    main(["recover", "plan", str(manifest_path), "--json"])
+    first = capsys.readouterr().out
+    main(["recover", "plan", str(manifest_path), "--json"])
+    second = capsys.readouterr().out
+    data = json.loads(first)
+
+    assert first == second
+    assert data["recovery_assessment_schema_version"] == 1
+    assert data["manifest"] == {
+        "path": str(manifest_path),
+        "schema_version": 2,
+        "state": "completed",
+    }
+    assert data["summary"] == {
+        "total": 1,
+        "proposed": 1,
+        "refused": 0,
+        "reconciliation": {"consistent": 1},
+        "safety": {"refused": 0, "safe_to_recover": 1},
+    }
+    assert data["items"] == [
+        {
+            "index": 0,
+            "historical": {
+                "original_path": str(tmp_path / "source.txt"),
+                "final_path": str(destination),
+                "category": "documents",
+                "status": "completed",
+            },
+            "identity": {
+                "state": "identity_match",
+                "reason": "identity_verified",
+            },
+            "plan": {
+                "disposition": "proposed",
+                "recovery_source": str(destination),
+                "recovery_destination": str(tmp_path / "source.txt"),
+            },
+            "reconciliation": {
+                "state": "consistent",
+                "source_exists": False,
+                "destination_exists": True,
+            },
+            "safety": {
+                "state": "safe_to_recover",
+                "reason": "recovery_preconditions_verified",
+                "explanation": (
+                    "recovery preconditions are verified by historical evidence "
+                    "and current observations"
+                ),
+            },
+        }
+    ]
+    assert "private payload" not in first
+    assert "digest" not in first
+    assert "size_bytes" not in first
+    assert "observed_at" not in first
+    assert "timestamp" not in first
+
+
+def test_recover_plan_json_schema_v1_for_refused_v1_assessment(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    target = tmp_path / "target"
+    payload = _recovery_payload_v1(target)
+    destination = Path(_first_recovery_move(payload)["final_path"])
+    destination.parent.mkdir(parents=True)
+    destination.write_text("current", encoding="utf-8")
+    manifest_path = _write_recovery_manifest(target, payload)
+
+    main(["recover", "plan", str(manifest_path), "--json"])
+
+    data = json.loads(capsys.readouterr().out)
+    item = data["items"][0]
+    assert data["summary"]["proposed"] == 0
+    assert data["summary"]["refused"] == 1
+    assert item["identity"] == {
+        "state": "identity_unverifiable",
+        "reason": "historical_identity_absent",
+    }
+    assert item["safety"]["state"] == "refused"
+    assert item["safety"]["reason"] == "identity_unverifiable"
+    assert item["plan"] == {"disposition": "refused"}
+    assert "recovery_source" not in item["plan"]
+    assert "recovery_destination" not in item["plan"]
+
+
+def test_recover_plan_refused_assessment_exits_successfully(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    target = tmp_path / "target"
+    payload = _recovery_payload_v1(target)
+    destination = Path(_first_recovery_move(payload)["final_path"])
+    destination.parent.mkdir(parents=True)
+    destination.write_text("current", encoding="utf-8")
+    manifest_path = _write_recovery_manifest(target, payload)
+
+    main(["recover", "plan", str(manifest_path), "--json"])
+
+    assert json.loads(capsys.readouterr().out)["items"][0]["plan"] == {
+        "disposition": "refused"
+    }
+
+
+def test_recover_plan_malformed_input_exits_two(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    target = tmp_path / "target"
+    manifest_path = _write_recovery_manifest(target, _recovery_payload_v1(target))
+    manifest_path.write_text("{", encoding="utf-8")
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(["recover", "plan", str(manifest_path)])
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 2
+    assert captured.out == ""
+    assert "manifest JSON is malformed" in captured.err
+
+
+def test_recover_plan_unsupported_schema_exits_two(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    target = tmp_path / "target"
+    payload = _recovery_payload_v1(target)
+    payload["schema_version"] = 999
+    manifest_path = _write_recovery_manifest(target, payload)
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(["recover", "plan", str(manifest_path)])
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 2
+    assert captured.out == ""
+    assert "manifest schema version is unsupported" in captured.err
+
+
+def test_recover_plan_access_failure_exits_one(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def fail_assessment(_path: Path):
+        raise cli_module.ManifestAccessError("manifest cannot be read")
+
+    monkeypatch.setattr(cli_module, "assess_recovery", fail_assessment)
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(
+            [
+                "recover",
+                "plan",
+                "/tmp/target/.smart-file-organizer/manifests/"
+                "apply-20260805T120000000000Z-0123456789ab.json",
+            ]
+        )
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 1
+    assert captured.out == ""
+    assert captured.err == "smart-file-organizer: error: manifest cannot be read\n"
+
+
+def test_recover_plan_cli_uses_assess_recovery_without_orchestration_bypass(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    target = tmp_path / "target"
+    content = b"current"
+    payload = _recovery_payload_v2(target, content)
+    destination = Path(_first_recovery_move(payload)["final_path"])
+    destination.parent.mkdir(parents=True)
+    destination.write_bytes(content)
+    manifest_path = _write_recovery_manifest(target, payload)
+    assessment = cli_module.assess_recovery(manifest_path)
+
+    monkeypatch.setattr(cli_module, "assess_recovery", lambda _path: assessment)
+    monkeypatch.setattr(
+        cli_module,
+        "verify_manifest",
+        lambda _path: pytest.fail("recovery CLI bypassed assess_recovery"),
+    )
+    monkeypatch.setattr(
+        cli_module,
+        "load_manifest",
+        lambda _path: pytest.fail("recovery CLI bypassed assess_recovery"),
+    )
+
+    main(["recover", "plan", str(manifest_path), "--json"])
+
+    data = json.loads(capsys.readouterr().out)
+    assert data["items"][0]["plan"]["disposition"] == RecoveryDisposition.PROPOSED
+
+
+def test_recover_plan_renderer_does_not_hash_or_reinterpret_recovery_semantics() -> (
+    None
+):
+    source = Path(cli_module.render_recovery_assessment.__code__.co_filename).read_text(
+        encoding="utf-8"
+    )
+
+    assert "hashlib" not in source
+    assert "_fingerprint" not in source
+    assert "classify_recovery_safety" not in source
+    assert "build_recovery_plan" not in source
+
+
+def test_recover_plan_matches_application_assessment_semantics(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    target = tmp_path / "target"
+    content = b"current"
+    payload = _recovery_payload_v2(target, content)
+    destination = Path(_first_recovery_move(payload)["final_path"])
+    destination.parent.mkdir(parents=True)
+    destination.write_bytes(content)
+    manifest_path = _write_recovery_manifest(target, payload)
+    assessment = cli_module.assess_recovery(manifest_path)
+
+    main(["recover", "plan", str(manifest_path), "--json"])
+
+    item = json.loads(capsys.readouterr().out)["items"][0]
+    assert item["identity"]["state"] == assessment.verification.moves[0].identity.state
+    assert item["safety"]["reason"] == (
+        assessment.safety_classification.decisions[0].reason
+    )
+    assert item["plan"]["disposition"] == assessment.plan.items[0].disposition
+
+
+def test_recover_plan_does_not_mutate_filesystem(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    target = tmp_path / "target"
+    content = b"current"
+    payload = _recovery_payload_v2(target, content)
+    source = Path(_first_recovery_move(payload)["original_path"])
+    destination = Path(_first_recovery_move(payload)["final_path"])
+    destination.parent.mkdir(parents=True)
+    destination.write_bytes(content)
+    manifest_path = _write_recovery_manifest(target, payload)
+    manifest_bytes = manifest_path.read_bytes()
+    destination_bytes = destination.read_bytes()
+
+    main(["recover", "plan", str(manifest_path), "--json"])
+
+    assert capsys.readouterr().err == ""
+    assert not source.exists()
+    assert destination.read_bytes() == destination_bytes
+    assert manifest_path.read_bytes() == manifest_bytes

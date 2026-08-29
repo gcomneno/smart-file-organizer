@@ -60,15 +60,21 @@ EXPECTED_EXPORTS = [
     "PlanOrganizationRequest",
     "PlannedMove",
     "ReconciliationState",
+    "RecoveryAssessment",
     "RecoveryDisposition",
     "RecoveryPlan",
     "RecoveryPlanItem",
+    "RecoverySafetyClassification",
+    "RecoverySafetyDecision",
+    "RecoverySafetyReason",
+    "RecoverySafetyState",
     "SourceMissingError",
     "SourceSelectionError",
     "TaxonomyProfileName",
     "UnsafePathError",
     "UnsupportedSourceSymlinkError",
     "apply_organization",
+    "assess_recovery",
     "list_manifests",
     "load_manifest",
     "plan_recovery",
@@ -99,6 +105,8 @@ FORBIDDEN_EXPORTS = {
     "format_execution_summary",
     "parse_config",
     "render_plan",
+    "classify_recovery_safety",
+    "build_recovery_plan",
     "validate_plan_destinations",
     "__version__",
     "get_version",
@@ -142,6 +150,7 @@ def test_public_functions_are_the_application_functions() -> None:
     assert api.load_manifest is application.load_manifest
     assert api.list_manifests is application.list_manifests
     assert api.verify_manifest is application.verify_manifest
+    assert api.assess_recovery is application.assess_recovery
     assert api.plan_recovery is application.plan_recovery
 
 

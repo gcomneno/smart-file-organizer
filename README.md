@@ -127,8 +127,12 @@ from smart_file_organizer.api import (
     ClassificationOutcome,
     EvidenceSource,
     PlanOrganizationRequest,
+    RecoveryDisposition,
+    RecoverySafetyReason,
+    RecoverySafetyState,
     TaxonomyProfileName,
     apply_organization,
+    assess_recovery,
     load_manifest,
     plan_recovery,
     plan_organization,
@@ -173,12 +177,19 @@ with TemporaryDirectory() as temporary_directory:
     # Historical manifest facts and current filesystem observations are separate.
     manifest = load_manifest(result.manifest_path)
     verification = verify_manifest(result.manifest_path)
+    assessment = assess_recovery(result.manifest_path)
     recovery = plan_recovery(result.manifest_path)
     assert manifest.schema_version == 2
     assert manifest.moves[0].identity is not None
     assert len(verification.moves) == 1
-    # Recovery planning is still the pre-v2 path-reconciliation behavior here.
-    # It is not yet an identity-aware SAFE_TO_RECOVER classification.
+    assert assessment.safety_classification.decisions[0].state is (
+        RecoverySafetyState.SAFE_TO_RECOVER
+    )
+    assert assessment.safety_classification.decisions[0].reason is (
+        RecoverySafetyReason.RECOVERY_PRECONDITIONS_VERIFIED
+    )
+    assert assessment.plan.items[0].disposition is RecoveryDisposition.PROPOSED
+    # Backward-compatible plan_recovery() still returns the plan layer.
     assert recovery.proposed_count == 1
 ~~~
 <!-- python-api-example:end -->
@@ -287,13 +298,14 @@ original contract and gain no retroactive identity evidence. Readers dispatch
 explicitly between supported v1 and v2 semantics; unknown schemas and unknown
 fields fail closed. Historical v2 identity evidence describes bytes observed
 during apply and does not prove that destination bytes remain unchanged later.
-Current identity verification is deliberately a separate follow-up capability.
+Current identity verification is deliberately separate from historical evidence
+and from recovery-safety classification.
 
 ~~~bash
 smart-file-organizer manifest list --target /path/to/organized
-smart-file-organizer manifest show /path/to/organized/.smart-file-organizer/manifests/app-20260101T120000000000Z-0123456789ab.json
-smart-file-organizer manifest verify /path/to/organized/.smart-file-organizer/manifests/app-20260101T120000000000Z-0123456789ab.json --json
-smart-file-organizer recover plan /path/to/organized/.smart-file-organizer/manifests/app-20260101T120000000000Z-0123456789ab.json
+smart-file-organizer manifest show /path/to/organized/.smart-file-organizer/manifests/apply-20260101T120000000000Z-0123456789ab.json
+smart-file-organizer manifest verify /path/to/organized/.smart-file-organizer/manifests/apply-20260101T120000000000Z-0123456789ab.json --json
+smart-file-organizer recover plan /path/to/organized/.smart-file-organizer/manifests/apply-20260101T120000000000Z-0123456789ab.json
 ~~~
 
 `manifest list` is non-recursive. It considers only direct entries whose names
@@ -304,16 +316,96 @@ listing with an invalid status rather than being loaded as manifests.
 `verify` makes fresh, read-only lstat-style observations. It reports
 `consistent`, `source_restored`, `both_present`, `both_missing`,
 `unexpected_destination`, `destination_missing`, `indeterminate`, or
-`unsafe_path`; it does not claim byte-level integrity or an unchanged
-destination. A valid manifest with an inconsistent current filesystem is still
-a successful verification result.
+`unsafe_path`. For schema-version-2 completed moves it also compares current
+destination bytes with recorded identity evidence. A valid manifest with an
+inconsistent current filesystem is still a successful verification result.
 
-`recover plan` is also read-only. It proposes a reverse move only for an
-unambiguous completed record whose destination is still the safe, sole source
-and whose original location is safe and absent. It never creates directories,
-moves files, removes files, or deletes manifests. Automatic undo is deliberately
-deferred because v1 cannot prove file identity or safely resolve conflicts that
-may have arisen after the historical apply.
+`recover plan` is also read-only. It is the CLI projection of
+`assess_recovery(path)`, which preserves the chain:
+
+~~~text
+ApplyManifest
+  -> ManifestVerification
+    -> RecoverySafetyClassification
+      -> RecoveryPlan
+~~~
+
+It proposes a reverse move only for a schema-version-2 completed record whose
+recorded identity matches the current destination, whose destination is still
+the safe recovery source, and whose original location is safe and absent. It
+never creates directories, moves files, removes files, or deletes manifests.
+`SAFE_TO_RECOVER` and `PROPOSED` are not mutation authority.
+
+Manifest schema-version-1 records remain readable, but they contain no
+historical payload identity evidence. A v1 recovery assessment is therefore a
+structured refusal: identity is `identity_unverifiable`, safety is `refused`,
+and the plan item is `refused` without reverse paths.
+
+Recovery-safety reason values exposed through the Python API are:
+`recovery_preconditions_verified`, `identity_unverifiable`,
+`historical_state_ambiguous`, `source_conflict`, `destination_missing`,
+`both_paths_present`, `both_paths_missing`, `destination_changed`,
+`unsafe_path`, `unsupported_file_type`, and `observation_failed`.
+
+`recover plan --json` emits a recovery-assessment JSON document with its own
+output schema version, independent from the persisted manifest schema:
+
+~~~json
+{
+  "recovery_assessment_schema_version": 1,
+  "manifest": {
+    "path": "/path/to/organized/.smart-file-organizer/manifests/apply-....json",
+    "schema_version": 2,
+    "state": "completed"
+  },
+  "summary": {
+    "total": 1,
+    "proposed": 1,
+    "refused": 0,
+    "reconciliation": {
+      "consistent": 1
+    },
+    "safety": {
+      "safe_to_recover": 1,
+      "refused": 0
+    }
+  },
+  "items": [
+    {
+      "index": 0,
+      "historical": {
+        "original_path": "/path/to/source.txt",
+        "final_path": "/path/to/organized/documents/source.txt",
+        "category": "documents",
+        "status": "completed"
+      },
+      "reconciliation": {
+        "state": "consistent",
+        "source_exists": false,
+        "destination_exists": true
+      },
+      "identity": {
+        "state": "identity_match",
+        "reason": "identity_verified"
+      },
+      "safety": {
+        "state": "safe_to_recover",
+        "reason": "recovery_preconditions_verified",
+        "explanation": "recovery preconditions are verified by historical evidence and current observations"
+      },
+      "plan": {
+        "disposition": "proposed",
+        "recovery_source": "/path/to/organized/documents/source.txt",
+        "recovery_destination": "/path/to/source.txt"
+      }
+    }
+  ]
+}
+~~~
+
+Refused JSON items expose only `"plan": {"disposition": "refused"}` and omit
+`recovery_source` and `recovery_destination`. Recovery-assessment JSON does not
+expose payload contents, SHA-256 digests, byte sizes, or observation timestamps.
 
 Example target layout:
 

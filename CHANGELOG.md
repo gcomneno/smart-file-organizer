@@ -4,6 +4,21 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- expose `assess_recovery()` and `RecoveryAssessment` through the supported
+  Python API as the canonical verifiable-recovery aggregate;
+- expose recovery-safety state, reason, decision, and classification models
+  through the supported Python API;
+- add versioned `recover plan --json` recovery-assessment output with
+  reconciliation, identity, safety, and plan layers.
+
+### Changed
+
+- make `recover plan` render the application recovery assessment and preserve
+  refusal as a successful read-only safety result;
+- normalize public recovery-safety reasons before freezing the API vocabulary.
+
 ## [0.5.0] - 2026-08-05
 
 ### Added

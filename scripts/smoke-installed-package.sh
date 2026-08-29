@@ -90,7 +90,15 @@ assert json.load(sys.stdin)["summary"]["consistent"] == 1
 "$CLI" recover plan "$MANIFEST" --json | "$VENV/bin/python" -c '
 import json
 import sys
-assert json.load(sys.stdin)["items"][0]["disposition"] == "proposed"
+payload = json.load(sys.stdin)
+assert payload["recovery_assessment_schema_version"] == 1
+item = payload["items"][0]
+assert item["safety"]["state"] == "safe_to_recover"
+assert item["safety"]["reason"] == "recovery_preconditions_verified"
+assert item["plan"]["disposition"] == "proposed"
+assert "recovery_source" in item["plan"]
+assert "digest" not in json.dumps(payload)
+assert "size_bytes" not in json.dumps(payload)
 '
 
 "$VENV/bin/python" - <<'PY'
@@ -160,15 +168,21 @@ expected_exports = [
     "PlanOrganizationRequest",
     "PlannedMove",
     "ReconciliationState",
+    "RecoveryAssessment",
     "RecoveryDisposition",
     "RecoveryPlan",
     "RecoveryPlanItem",
+    "RecoverySafetyClassification",
+    "RecoverySafetyDecision",
+    "RecoverySafetyReason",
+    "RecoverySafetyState",
     "SourceMissingError",
     "SourceSelectionError",
     "TaxonomyProfileName",
     "UnsafePathError",
     "UnsupportedSourceSymlinkError",
     "apply_organization",
+    "assess_recovery",
     "list_manifests",
     "load_manifest",
     "plan_recovery",
@@ -226,6 +240,11 @@ with TemporaryDirectory() as temporary_directory:
     assert result.manifest_path.is_file()
     assert (target / "documents/inbox/source.txt").is_file()
     assert not source.exists()
+    assessment = api.assess_recovery(result.manifest_path)
+    recovery_plan = api.plan_recovery(result.manifest_path)
+    assert recovery_plan.items[0].disposition is api.RecoveryDisposition.PROPOSED
+    assert assessment.safety_classification.decisions[0].state is api.RecoverySafetyState.SAFE_TO_RECOVER
+    assert assessment.safety_classification.decisions[0].reason is api.RecoverySafetyReason.RECOVERY_PRECONDITIONS_VERIFIED
 PY
 
 printf 'Installed smoke test passed: Python %s, package %s\n' \

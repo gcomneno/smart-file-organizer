@@ -21,7 +21,10 @@ from smart_file_organizer.manifest_models import (
     ApplyManifest,
     ManifestReference,
     ManifestVerification,
+    MoveReconciliation,
+    RecoveryDisposition,
     RecoveryPlan,
+    RecoveryPlanItem,
 )
 from smart_file_organizer.manifest_store import ManifestStore
 from smart_file_organizer.manifest_verification import (
@@ -47,7 +50,12 @@ from smart_file_organizer.planning import (
     resolve_destination_conflicts,
 )
 from smart_file_organizer.recovery_planning import plan_recovery as _plan_recovery
-from smart_file_organizer.recovery_safety import classify_recovery_safety
+from smart_file_organizer.recovery_safety import (
+    RecoverySafetyClassification,
+    RecoverySafetyDecision,
+    RecoverySafetyState,
+    classify_recovery_safety,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -111,6 +119,20 @@ class OrganizationPlanConflictError(DestinationConflictError):
         }
         self.conflicts = MappingProxyType(ordered_conflicts)
         super().__init__("destination conflicts detected")
+
+
+@dataclass(frozen=True, slots=True)
+class RecoveryAssessment:
+    """Validated non-mutating recovery assessment for one manifest."""
+
+    manifest: ApplyManifest
+    verification: ManifestVerification
+    safety_classification: RecoverySafetyClassification
+    plan: RecoveryPlan
+
+    def __post_init__(self) -> None:
+        """Fail closed if any aggregate layer diverges from the same move order."""
+        _validate_recovery_assessment(self)
 
 
 def collect_sources(
@@ -298,8 +320,78 @@ def verify_manifest(path: Path) -> ManifestVerification:
     return _verify_manifest(load_manifest(path))
 
 
-def plan_recovery(path: Path) -> RecoveryPlan:
-    """Build a non-mutating manual recovery plan for one manifest."""
+def assess_recovery(path: Path) -> RecoveryAssessment:
+    """Build the canonical non-mutating recovery assessment for one manifest."""
     verification = verify_manifest(path)
     classification = classify_recovery_safety(verification)
-    return _plan_recovery(classification)
+    plan = _plan_recovery(classification)
+    return RecoveryAssessment(verification.manifest, verification, classification, plan)
+
+
+def plan_recovery(path: Path) -> RecoveryPlan:
+    """Build a non-mutating manual recovery plan for one manifest."""
+    return assess_recovery(path).plan
+
+
+def _validate_recovery_assessment(assessment: RecoveryAssessment) -> None:
+    manifest = assessment.manifest
+    verification = assessment.verification
+    classification = assessment.safety_classification
+    plan = assessment.plan
+    if verification.manifest != manifest:
+        raise ValueError("recovery assessment verification does not match manifest")
+    if classification.verification != verification:
+        raise ValueError("recovery assessment safety classification is misaligned")
+    if plan.manifest != manifest:
+        raise ValueError("recovery assessment plan does not match manifest")
+    if plan.verification != verification:
+        raise ValueError("recovery assessment plan verification is misaligned")
+
+    reconciliations = verification.moves
+    decisions = classification.decisions
+    items = plan.items
+    if len(decisions) != len(reconciliations) or len(items) != len(reconciliations):
+        raise ValueError("recovery assessment layers have mismatched cardinality")
+    _validate_decisions(reconciliations, decisions)
+    _validate_plan_items(reconciliations, decisions, items)
+
+
+def _validate_decisions(
+    reconciliations: tuple[MoveReconciliation, ...],
+    decisions: tuple[RecoverySafetyDecision, ...],
+) -> None:
+    if tuple(decision.reconciliation for decision in decisions) != reconciliations:
+        raise ValueError("recovery assessment safety decisions are misaligned")
+
+
+def _validate_plan_items(
+    reconciliations: tuple[MoveReconciliation, ...],
+    decisions: tuple[RecoverySafetyDecision, ...],
+    items: tuple[RecoveryPlanItem, ...],
+) -> None:
+    if tuple(item.reconciliation for item in items) != reconciliations:
+        raise ValueError("recovery assessment plan items are misaligned")
+    if tuple(item.move for item in items) != tuple(
+        reconciliation.move for reconciliation in reconciliations
+    ):
+        raise ValueError("recovery assessment plan moves are misaligned")
+    for item, decision in zip(items, decisions, strict=True):
+        if item.safety_decision is not None and item.safety_decision != decision:
+            raise ValueError(
+                "recovery assessment plan item safety provenance is misaligned"
+            )
+        if item.reason != decision.reason.value:
+            raise ValueError("recovery assessment plan item reason is misaligned")
+        if decision.state is RecoverySafetyState.SAFE_TO_RECOVER:
+            if (
+                item.disposition is not RecoveryDisposition.PROPOSED
+                or item.recovery_source != item.move.final_path
+                or item.recovery_destination != item.move.original_path
+            ):
+                raise ValueError("recovery assessment plan item is misaligned")
+        elif (
+            item.disposition is not RecoveryDisposition.REFUSED
+            or item.recovery_source is not None
+            or item.recovery_destination is not None
+        ):
+            raise ValueError("recovery assessment plan item is misaligned")

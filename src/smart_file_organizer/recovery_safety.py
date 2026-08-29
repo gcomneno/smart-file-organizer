@@ -25,12 +25,11 @@ class RecoverySafetyState(StrEnum):
 
 
 class RecoverySafetyReason(StrEnum):
-    """Stable primary reason for one internal recovery-safety decision."""
+    """Stable primary reason for one recovery-safety decision."""
 
     RECOVERY_PRECONDITIONS_VERIFIED = "recovery_preconditions_verified"
     IDENTITY_UNVERIFIABLE = "identity_unverifiable"
-    HISTORICAL_MOVE_NOT_COMPLETED = "historical_move_not_completed"
-    MANIFEST_PATH_CONFLICT = "manifest_path_conflict"
+    HISTORICAL_STATE_AMBIGUOUS = "historical_state_ambiguous"
     SOURCE_CONFLICT = "source_conflict"
     DESTINATION_MISSING = "destination_missing"
     BOTH_PATHS_PRESENT = "both_paths_present"
@@ -39,7 +38,6 @@ class RecoverySafetyReason(StrEnum):
     UNSAFE_PATH = "unsafe_path"
     UNSUPPORTED_FILE_TYPE = "unsupported_file_type"
     OBSERVATION_FAILED = "observation_failed"
-    SAFETY_NOT_DEMONSTRATED = "safety_not_demonstrated"
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,11 +101,11 @@ def _primary_reason(
 ) -> RecoverySafetyReason:
     move = reconciliation.move
     if move.status is not MoveStatus.COMPLETED:
-        return RecoverySafetyReason.HISTORICAL_MOVE_NOT_COMPLETED
+        return RecoverySafetyReason.HISTORICAL_STATE_AMBIGUOUS
     if verification.manifest.schema_version != 2 or move.identity is None:
         return RecoverySafetyReason.IDENTITY_UNVERIFIABLE
     if move.original_path in conflicts or move.final_path in conflicts:
-        return RecoverySafetyReason.MANIFEST_PATH_CONFLICT
+        return RecoverySafetyReason.HISTORICAL_STATE_AMBIGUOUS
 
     observation_reason = _observation_refusal(reconciliation)
     if observation_reason is not None:
@@ -122,7 +120,7 @@ def _primary_reason(
         return identity_reason
 
     if not _required_safety_demonstrated(reconciliation):
-        return RecoverySafetyReason.SAFETY_NOT_DEMONSTRATED
+        return _missing_safety_reason(reconciliation)
     return RecoverySafetyReason.RECOVERY_PRECONDITIONS_VERIFIED
 
 
@@ -178,7 +176,7 @@ def _reconciliation_refusal(
     if reconciliation.state is ReconciliationState.UNSAFE_PATH:
         return RecoverySafetyReason.UNSAFE_PATH
     if reconciliation.state is not ReconciliationState.CONSISTENT:
-        return RecoverySafetyReason.SAFETY_NOT_DEMONSTRATED
+        return RecoverySafetyReason.HISTORICAL_STATE_AMBIGUOUS
     return None
 
 
@@ -212,6 +210,35 @@ def _required_safety_demonstrated(reconciliation: MoveReconciliation) -> bool:
     )
 
 
+def _missing_safety_reason(
+    reconciliation: MoveReconciliation,
+) -> RecoverySafetyReason:
+    observations = (
+        reconciliation.source_observation,
+        reconciliation.destination_observation,
+    )
+    if (
+        any(
+            observation.status is PathObservationStatus.OBSERVATION_FAILED
+            or observation.leaf_exists is None
+            or observation.parent_topology_safe is None
+            for observation in observations
+        )
+        or reconciliation.destination_observation.containment_safe is None
+    ):
+        return RecoverySafetyReason.OBSERVATION_FAILED
+    if any(
+        observation.status is PathObservationStatus.UNSAFE_PATH
+        or observation.containment_safe is False
+        or observation.parent_topology_safe is False
+        for observation in observations
+    ):
+        return RecoverySafetyReason.UNSAFE_PATH
+    if reconciliation.source_observation.parent_missing:
+        return RecoverySafetyReason.SOURCE_CONFLICT
+    return RecoverySafetyReason.HISTORICAL_STATE_AMBIGUOUS
+
+
 def _source_restoration_path_available(observation: CurrentPathObservation) -> bool:
     return (
         observation.status is PathObservationStatus.MISSING
@@ -236,8 +263,7 @@ def _destination_recovery_source_available(
 def _explanation(reason: RecoverySafetyReason) -> str:
     return {
         RecoverySafetyReason.IDENTITY_UNVERIFIABLE: "historical identity evidence is insufficient for safe recovery",
-        RecoverySafetyReason.HISTORICAL_MOVE_NOT_COMPLETED: "historical move did not complete",
-        RecoverySafetyReason.MANIFEST_PATH_CONFLICT: "manifest paths participate in conflicting historical moves",
+        RecoverySafetyReason.HISTORICAL_STATE_AMBIGUOUS: "historical or reconciled state is ambiguous for safe recovery",
         RecoverySafetyReason.SOURCE_CONFLICT: "original location is occupied",
         RecoverySafetyReason.DESTINATION_MISSING: "current recovery source is missing",
         RecoverySafetyReason.BOTH_PATHS_PRESENT: "original and final paths are both present",
@@ -246,5 +272,4 @@ def _explanation(reason: RecoverySafetyReason) -> str:
         RecoverySafetyReason.UNSAFE_PATH: "a required path has unsafe topology or containment",
         RecoverySafetyReason.UNSUPPORTED_FILE_TYPE: "a required filesystem object is unsupported",
         RecoverySafetyReason.OBSERVATION_FAILED: "a required filesystem observation failed",
-        RecoverySafetyReason.SAFETY_NOT_DEMONSTRATED: "recovery safety preconditions are not positively demonstrated",
     }[reason]
