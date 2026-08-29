@@ -195,6 +195,25 @@ def test_completed_v2_verified_consistent_move_is_safe_to_recover() -> None:
     )
 
 
+def test_recovery_safety_reason_public_vocabulary_is_normalized() -> None:
+    assert [reason.value for reason in RecoverySafetyReason] == [
+        "recovery_preconditions_verified",
+        "identity_unverifiable",
+        "historical_state_ambiguous",
+        "source_conflict",
+        "destination_missing",
+        "both_paths_present",
+        "both_paths_missing",
+        "destination_changed",
+        "unsafe_path",
+        "unsupported_file_type",
+        "observation_failed",
+    ]
+    assert "safety_not_demonstrated" not in {
+        reason.value for reason in RecoverySafetyReason
+    }
+
+
 def test_manifest_v1_refuses_as_identity_unverifiable() -> None:
     move = _move(include_identity=False)
     reconciliation = _reconciliation(move)
@@ -210,7 +229,7 @@ def test_non_completed_historical_move_refuses() -> None:
 
     assert _decision(_reconciliation(move)) == (
         RecoverySafetyState.REFUSED,
-        RecoverySafetyReason.HISTORICAL_MOVE_NOT_COMPLETED,
+        RecoverySafetyReason.HISTORICAL_STATE_AMBIGUOUS,
     )
 
 
@@ -377,7 +396,7 @@ def test_parent_observation_failure_refuses() -> None:
     )
 
 
-def test_safety_or_containment_not_demonstrated_refuses() -> None:
+def test_indeterminate_containment_refuses_as_observation_failed() -> None:
     reconciliation = _reconciliation(
         destination_observation=_path_observation(
             path=Path("/target/documents/source.txt"),
@@ -389,11 +408,11 @@ def test_safety_or_containment_not_demonstrated_refuses() -> None:
 
     assert _decision(reconciliation) == (
         RecoverySafetyState.REFUSED,
-        RecoverySafetyReason.SAFETY_NOT_DEMONSTRATED,
+        RecoverySafetyReason.OBSERVATION_FAILED,
     )
 
 
-def test_missing_parent_component_refuses_as_safety_not_demonstrated() -> None:
+def test_missing_parent_component_refuses_as_source_conflict() -> None:
     reconciliation = _reconciliation(
         source_observation=_path_observation(
             path=Path("/missing-parent/source.txt"),
@@ -408,7 +427,7 @@ def test_missing_parent_component_refuses_as_safety_not_demonstrated() -> None:
     assert reconciliation.source_observation.parent_missing is True
     assert _decision(reconciliation) == (
         RecoverySafetyState.REFUSED,
-        RecoverySafetyReason.SAFETY_NOT_DEMONSTRATED,
+        RecoverySafetyReason.SOURCE_CONFLICT,
     )
 
 
@@ -423,8 +442,8 @@ def test_duplicate_manifest_path_participation_refuses() -> None:
     classification = classify_recovery_safety(_verification(reconciliations))
 
     assert [decision.reason for decision in classification.decisions] == [
-        RecoverySafetyReason.MANIFEST_PATH_CONFLICT,
-        RecoverySafetyReason.MANIFEST_PATH_CONFLICT,
+        RecoverySafetyReason.HISTORICAL_STATE_AMBIGUOUS,
+        RecoverySafetyReason.HISTORICAL_STATE_AMBIGUOUS,
     ]
 
 
@@ -450,7 +469,7 @@ def test_reason_precedence_is_deterministic() -> None:
     )
 
     assert classification.decisions[0].reason is (
-        RecoverySafetyReason.MANIFEST_PATH_CONFLICT
+        RecoverySafetyReason.HISTORICAL_STATE_AMBIGUOUS
     )
 
 
@@ -530,8 +549,7 @@ def test_recovery_planner_maps_safe_to_recover_to_proposed() -> None:
         RecoverySafetyReason.UNSAFE_PATH,
         RecoverySafetyReason.UNSUPPORTED_FILE_TYPE,
         RecoverySafetyReason.OBSERVATION_FAILED,
-        RecoverySafetyReason.MANIFEST_PATH_CONFLICT,
-        RecoverySafetyReason.SAFETY_NOT_DEMONSTRATED,
+        RecoverySafetyReason.HISTORICAL_STATE_AMBIGUOUS,
     ),
 )
 def test_recovery_planner_maps_refused_safety_to_refused(
@@ -688,7 +706,7 @@ def test_verify_manifest_records_missing_parent_component_as_refused(
 
     assert verification.moves[0].source_observation.parent_missing is True
     assert decision.state is RecoverySafetyState.REFUSED
-    assert decision.reason is RecoverySafetyReason.SAFETY_NOT_DEMONSTRATED
+    assert decision.reason is RecoverySafetyReason.SOURCE_CONFLICT
 
 
 def test_verify_manifest_records_parent_observation_failure(

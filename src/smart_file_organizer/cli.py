@@ -13,10 +13,10 @@ from smart_file_organizer.application import (
     OrganizationPlanConflictError,
     PlanOrganizationRequest,
     apply_organization,
+    assess_recovery,
     collect_sources as _collect_sources,
     list_manifests,
     load_manifest,
-    plan_recovery,
     plan_organization,
     verify_manifest,
 )
@@ -28,14 +28,16 @@ from smart_file_organizer.errors import (
     DestinationParentError,
     InvalidSourceError,
     ManifestWriteError,
+    ManifestAccessError,
     ManifestError,
+    ManifestFormatError,
     SourceMissingError,
     SourceSelectionError,
     UnsafePathError,
 )
 from smart_file_organizer.manifest_output import (
     render_manifest,
-    render_recovery_plan,
+    render_recovery_assessment,
     render_references,
     render_verification,
 )
@@ -377,7 +379,13 @@ def _run_recovery_command(
         parser.error("recover requires plan")
     try:
         sys.stdout.write(
-            render_recovery_plan(plan_recovery(args.manifest), json_output=args.json)
+            render_recovery_assessment(
+                assess_recovery(args.manifest), json_output=args.json
+            )
         )
+    except ManifestAccessError as error:
+        parser.exit(1, f"{parser.prog}: error: {error}\n")
+    except ManifestFormatError as error:
+        parser.error(str(error))
     except ManifestError as error:
         parser.error(str(error))

@@ -1,14 +1,27 @@
 """Deterministic private CLI renderers for manifest operations."""
 
 import json
+from typing import TYPE_CHECKING
 
 from smart_file_organizer.manifest_models import (
     ApplyManifest,
     ManifestReference,
     ManifestVerification,
     MoveIdentityVerification,
+    ReconciliationState,
+    RecoveryDisposition,
     RecoveryPlan,
+    RecoveryPlanItem,
 )
+from smart_file_organizer.recovery_safety import (
+    RecoverySafetyDecision,
+    RecoverySafetyState,
+)
+
+if TYPE_CHECKING:
+    from smart_file_organizer.application import RecoveryAssessment
+
+RECOVERY_ASSESSMENT_SCHEMA_VERSION = 1
 
 
 def render_manifest(manifest: ApplyManifest, *, json_output: bool) -> str:
@@ -137,6 +150,38 @@ def render_recovery_plan(plan: RecoveryPlan, *, json_output: bool) -> str:
     ) + ("\n" if plan.items else "No recovery records.\n")
 
 
+def render_recovery_assessment(
+    assessment: "RecoveryAssessment", *, json_output: bool
+) -> str:
+    """Render the public non-mutating recovery assessment contract."""
+    data = _recovery_assessment_data(assessment)
+    if json_output:
+        return _json(data)
+    if not assessment.plan.items:
+        return "No recovery records.\n"
+    lines: list[str] = []
+    for item, decision in zip(
+        assessment.plan.items,
+        assessment.safety_classification.decisions,
+        strict=True,
+    ):
+        reconciliation = item.reconciliation
+        identity = reconciliation.identity
+        lines.extend(
+            [
+                f"- {item.move.original_path} -> {item.move.final_path}",
+                f"  reconciliation: {reconciliation.state.value}",
+                (f"  identity: {identity.state.value} ({identity.reason.value})"),
+                (
+                    f"  safety: {decision.state.value} "
+                    f"({decision.reason.value}) - {decision.explanation}"
+                ),
+                f"  plan: {_plan_text(item)}",
+            ]
+        )
+    return "\n".join(lines) + "\n"
+
+
 def _manifest_data(manifest: ApplyManifest) -> dict[str, object]:
     return {
         "schema_version": manifest.schema_version,
@@ -180,6 +225,96 @@ def _identity_data(identity: MoveIdentityVerification) -> dict[str, object]:
             else None,
         },
     }
+
+
+def _recovery_assessment_data(assessment: "RecoveryAssessment") -> dict[str, object]:
+    return {
+        "recovery_assessment_schema_version": RECOVERY_ASSESSMENT_SCHEMA_VERSION,
+        "manifest": {
+            "path": str(assessment.manifest.path),
+            "schema_version": assessment.manifest.schema_version,
+            "state": assessment.manifest.state,
+        },
+        "summary": _recovery_summary(assessment),
+        "items": [
+            _recovery_assessment_item(index, item, decision)
+            for index, (item, decision) in enumerate(
+                zip(
+                    assessment.plan.items,
+                    assessment.safety_classification.decisions,
+                    strict=True,
+                )
+            )
+        ],
+    }
+
+
+def _recovery_summary(assessment: "RecoveryAssessment") -> dict[str, object]:
+    proposed = assessment.plan.proposed_count
+    total = len(assessment.plan.items)
+    return {
+        "total": total,
+        "proposed": proposed,
+        "refused": total - proposed,
+        "reconciliation": {
+            state.value: assessment.verification.count(state)
+            for state in ReconciliationState
+            if assessment.verification.count(state)
+        },
+        "safety": {
+            state.value: sum(
+                decision.state is state
+                for decision in assessment.safety_classification.decisions
+            )
+            for state in RecoverySafetyState
+        },
+    }
+
+
+def _recovery_assessment_item(
+    index: int, item: RecoveryPlanItem, decision: RecoverySafetyDecision
+) -> dict[str, object]:
+    reconciliation = item.reconciliation
+    move = item.move
+    data: dict[str, object] = {
+        "index": index,
+        "historical": {
+            "original_path": str(move.original_path),
+            "final_path": str(move.final_path),
+            "category": move.category.value,
+            "status": move.status.value,
+        },
+        "reconciliation": {
+            "state": reconciliation.state.value,
+            "source_exists": reconciliation.source_exists,
+            "destination_exists": reconciliation.destination_exists,
+        },
+        "identity": {
+            "state": reconciliation.identity.state.value,
+            "reason": reconciliation.identity.reason.value,
+        },
+        "safety": {
+            "state": decision.state.value,
+            "reason": decision.reason.value,
+            "explanation": decision.explanation,
+        },
+        "plan": {
+            "disposition": item.disposition.value,
+        },
+    }
+    if item.disposition is RecoveryDisposition.PROPOSED:
+        data["plan"] = {
+            "disposition": item.disposition.value,
+            "recovery_source": str(item.recovery_source),
+            "recovery_destination": str(item.recovery_destination),
+        }
+    return data
+
+
+def _plan_text(item: RecoveryPlanItem) -> str:
+    if item.disposition is RecoveryDisposition.PROPOSED:
+        return f"proposed {item.recovery_source} -> {item.recovery_destination}"
+    return "refused"
 
 
 def _json(value: object) -> str:
