@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- add ADR 0004 defining the Phase 7 desktop adapter authority and packaging
+  contract;
 - expose `assess_recovery()` and `RecoveryAssessment` through the supported
   Python API as the canonical verifiable-recovery aggregate;
 - expose recovery-safety state, reason, decision, and classification models
