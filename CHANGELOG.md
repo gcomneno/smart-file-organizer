@@ -25,6 +25,8 @@ All notable changes to this project are documented in this file.
 
 - harden CI and release workflow permissions and pin external actions to
   immutable commit SHAs.
+- add explicit release artifact build provenance and draft asset validation
+  before publishing future GitHub Releases.
 
 ## [0.5.0] - 2026-08-05
 
