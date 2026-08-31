@@ -18,6 +18,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      attestations: write
+      id-token: write
     steps:
       - name: Checkout tagged source
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -59,14 +61,74 @@ jobs:
         env:
           UV_PYTHON: "3.12"
         run: scripts/smoke-installed-package.sh dist/*.whl
-      - name: Publish GitHub Release
+      - name: Attest release artifacts
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
+        with:
+          subject-path: |
+            dist/*.whl
+            dist/*.tar.gz
+            dist/SHA256SUMS
+      - name: Create draft GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
-            dist/*.whl \
-            dist/*.tar.gz \
-            dist/SHA256SUMS \
+            --draft \
             --verify-tag \
             --title "$GITHUB_REF_NAME" \
             --generate-notes
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "$GITHUB_REF_NAME" \
+            dist/*.whl \
+            dist/*.tar.gz \
+            dist/SHA256SUMS
+      - name: Validate draft release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          artifact_patterns = ("dist/*.whl", "dist/*.tar.gz", "dist/SHA256SUMS")
+          expected_assets = sorted(
+              path.name for pattern in artifact_patterns for path in Path().glob(pattern)
+          )
+          if len(expected_assets) != 3:
+              raise SystemExit(
+                  "expected exactly one wheel, one source distribution, and "
+                  f"SHA256SUMS; found {expected_assets!r}"
+              )
+
+          tag = os.environ["GITHUB_REF_NAME"]
+          result = subprocess.run(
+              ["gh", "release", "view", tag, "--json", "isDraft,assets"],
+              check=True,
+              stdout=subprocess.PIPE,
+              text=True,
+          )
+          release = json.loads(result.stdout)
+          if not release.get("isDraft"):
+              raise SystemExit(f"release {tag!r} is not a draft")
+
+          actual_assets = sorted(
+              asset["name"] for asset in release.get("assets", [])
+          )
+          if actual_assets != expected_assets:
+              raise SystemExit(
+                  "draft release assets do not match local release artifacts\n"
+                  f"expected: {expected_assets!r}\n"
+                  f"actual:   {actual_assets!r}"
+              )
+
+          print(f"Verified draft release assets for {tag}: {actual_assets}")
+          PY
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "$GITHUB_REF_NAME" --draft=false --verify-tag

@@ -84,6 +84,10 @@ Each release includes `SHA256SUMS`. Verify downloaded package artifacts with:
 sha256sum --check SHA256SUMS
 ~~~
 
+Future releases published after GitHub Immutable Releases is enabled are also
+intended to include GitHub release attestation and explicit build provenance.
+These attestations complement, but do not replace, `SHA256SUMS`.
+
 The complete release procedure is documented in
 [docs/releasing.md](docs/releasing.md).
 
