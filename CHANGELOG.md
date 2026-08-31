@@ -21,6 +21,11 @@ All notable changes to this project are documented in this file.
   refusal as a successful read-only safety result;
 - normalize public recovery-safety reasons before freezing the API vocabulary.
 
+### Security
+
+- harden CI and release workflow permissions and pin external actions to
+  immutable commit SHAs.
+
 ## [0.5.0] - 2026-08-05
 
 ### Added
