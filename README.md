@@ -9,12 +9,10 @@ The project organizes files by building a safe plan first. By default it only pr
 
 ## Project status
 
-The latest published release is **v0.5.0**. Current `main` contains unreleased
-development after v0.5.0, including Manifest v2 identity evidence, the current
-verifiable-recovery assessment chain, release-workflow hardening, and a
-read-only desktop recovery-assessment prototype. Unless a section explicitly
-describes a published release, this README documents current `main`; these
-post-v0.5.0 capabilities are not part of the v0.5.0 release.
+The current package version is **v0.6.0**. GitHub Releases is the supported
+distribution channel; consult the
+[Releases page](https://github.com/gcomneno/smart-file-organizer/releases) for
+publication availability. This README documents the v0.6.0 package tree.
 
 The approved architectural direction is
 [ADR 0001](docs/adr/0001-evolution-architecture.md). The normative
@@ -23,7 +21,7 @@ verifiable-recovery contract is defined by
 [Italian mirror](docs/adr/0002-verifiable-recovery-contract.it.md).
 The [product readiness assessment](docs/product-readiness-assessment.md) is
 retained as the historical v0.3.3 assessment; its verdict does not describe
-v0.5.0 or current development.
+v0.6.0.
 
 ## Current features
 
@@ -53,10 +51,11 @@ Requirements:
 - Python 3.11 or Python 3.12;
 - `uv` for isolated command installation.
 
-Install the latest published release, version `0.5.0`, directly from its wheel:
+Install version `0.6.0` directly from its wheel when it is available on the
+Releases page:
 
 ~~~bash
-uv tool install "https://github.com/gcomneno/smart-file-organizer/releases/download/v0.5.0/smart_file_organizer-0.5.0-py3-none-any.whl"
+uv tool install "https://github.com/gcomneno/smart-file-organizer/releases/download/v0.6.0/smart_file_organizer-0.6.0-py3-none-any.whl"
 ~~~
 
 Verify the installed version and provenance:
@@ -69,7 +68,7 @@ uv tool list
 Expected output:
 
 ~~~text
-smart-file-organizer 0.5.0
+smart-file-organizer 0.6.0
 ~~~
 
 Start with a dry run. Create a sample text file, then run:
@@ -89,11 +88,11 @@ Each release includes `SHA256SUMS`. Verify downloaded package artifacts with:
 sha256sum --check SHA256SUMS
 ~~~
 
-The release workflow on current `main` is configured to generate explicit
-build provenance and to validate exact draft assets before publication. Releases
-created after GitHub Immutable Releases is enabled are also expected to receive
-GitHub's immutable-release attestation. These post-v0.5.0 controls are not
-retroactive and complement, but do not replace, `SHA256SUMS`.
+The release workflow generates explicit build provenance and validates the
+exact draft asset filename set before publication. Releases created after
+GitHub Immutable Releases is enabled are also expected to receive GitHub's
+immutable-release attestation. These controls are not retroactive and
+complement, but do not replace, `SHA256SUMS`.
 
 The complete release procedure is documented in
 [docs/releasing.md](docs/releasing.md).
@@ -112,14 +111,13 @@ Run the test suite:
 uv run python -m pytest
 ~~~
 
-## Provisional Python API on current main
+## Provisional Python API
 
 The supported Python import path is `smart_file_organizer.api`. This Python API
 is provisional before 1.0 and until it has survived at least one release cycle.
 The CLI remains the most stable user-facing contract; the Python API is
 separately governed. Manifest schema compatibility is independently versioned.
-The example below describes current unreleased `main`; its verifiable-recovery
-assessment additions postdate v0.5.0.
+The verifiable-recovery assessment API shown below is included in v0.6.0.
 
 Internals, including `core.py` and implementation modules, may change without
 compatibility guarantees. Configure planning with
@@ -299,10 +297,8 @@ This moves files into category directories under the target root.
 
 ### Inspect and verify apply manifests
 
-This section describes current unreleased `main`. The v0.5.0 release supports
-strict schema-v1 manifest inspection, verification, and non-mutating recovery
-planning; Manifest v2 identity evidence and the safety-aware assessment layers
-below were added after that release.
+The v0.6.0 package includes Manifest v2 identity evidence and the safety-aware
+assessment layers below while retaining strict Manifest v1 readability.
 
 Apply manifests are owned by an independently versioned execution schema.
 Explicit apply now writes strict schema version 2 manifests. Every completed v2
@@ -426,10 +422,10 @@ Refused JSON items expose only `"plan": {"disposition": "refused"}` and omit
 `recovery_source` and `recovery_destination`. Recovery-assessment JSON does not
 expose payload contents, SHA-256 digests, byte sizes, or observation timestamps.
 
-### Read-only desktop recovery assessment (current main)
+### Read-only desktop recovery assessment
 
-Current unreleased `main` includes a read-only desktop prototype for inspecting
-the same recovery-assessment layers:
+v0.6.0 includes a read-only desktop prototype for inspecting the same
+recovery-assessment layers:
 
 ~~~bash
 python -m smart_file_organizer.gui
@@ -442,8 +438,7 @@ results, not filesystem-mutation authority.
 The adapter uses Python's stdlib `tkinter` when the Python and Linux system
 installation provide Tk support. Tk is optional: it is not a mandatory runtime
 dependency of the core package, and missing Tk support does not prevent CLI or
-Python API use. The desktop prototype is post-v0.5.0 development and is not
-included in the v0.5.0 release.
+Python API use.
 
 Example target layout:
 
@@ -628,7 +623,7 @@ recovery assessment. The corresponding Python API surfaces are
 `verify_manifest(path)`, `assess_recovery(path)`, and the compatibility
 plan-layer function `plan_recovery(path)`.
 
-Current `main` has no supported recovery executor. Verification, recovery
+v0.6.0 has no supported recovery executor. Verification, recovery
 assessment, and recovery planning are non-mutating. In particular,
 `SAFE_TO_RECOVER` and `PROPOSED` are point-in-time evidence/proposal results;
 they do not authorize a human, the CLI, the Python API, or the desktop adapter

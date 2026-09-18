@@ -4,29 +4,51 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-18
+
 ### Added
 
-- add ADR 0004 defining the Phase 7 desktop adapter authority and packaging
-  contract;
-- expose `assess_recovery()` and `RecoveryAssessment` through the supported
-  Python API as the canonical verifiable-recovery aggregate;
-- expose recovery-safety state, reason, decision, and classification models
-  through the supported Python API;
-- add versioned `recover plan --json` recovery-assessment output with
-  reconciliation, identity, safety, and plan layers.
+- add Manifest v2 historical identity evidence with complete SHA-256 digests
+  and byte counts observed before and after every successfully completed move;
+- add fresh current identity observation and verification, kept distinct from
+  historical evidence, path reconciliation, and recovery-safety classification;
+- add safety-aware, non-mutating recovery planning and classification through
+  `RecoveryAssessment`, `assess_recovery()`, and supported public recovery
+  state, reason, decision, identity, reconciliation, and plan API models;
+- add independently versioned recovery-assessment JSON with historical,
+  reconciliation, identity, safety, and plan layers;
+- include an optional read-only Tk desktop recovery-assessment prototype,
+  launched with `python -m smart_file_organizer.gui` without making Tk a core
+  dependency;
+- add ADRs 0002, 0003, and 0004 for verifiable recovery, Manifest v2 identity,
+  and desktop adapter authority and packaging.
 
 ### Changed
 
-- make `recover plan` render the application recovery assessment and preserve
-  refusal as a successful read-only safety result;
-- normalize public recovery-safety reasons before freezing the API vocabulary.
+- make `recover plan` text and JSON render the full recovery assessment;
+  refused recovery is a successful read-only safety result, and refused JSON
+  items omit reverse paths;
+- keep Manifest v1 strictly readable while conservatively classifying recovery
+  as unverifiable and refused, with no proposed reverse path, because v1 lacks
+  historical payload identity evidence;
+- require two-sided matching identity evidence for a Manifest v2 move to be
+  recorded as completed, while preserving truthful failed, unattempted, and
+  interrupted evidence when apply cannot satisfy the completion contract;
+- normalize the supported public recovery-safety reason vocabulary;
+- retain recovery as assessment and planning only: v0.6.0 has no recovery
+  executor, automatic rollback, overwrite authority, or `recover --apply`.
 
 ### Security
 
-- harden CI and release workflow permissions and pin external actions to
-  immutable commit SHAs.
-- add explicit release artifact build provenance and draft asset validation
-  before publishing future GitHub Releases.
+- fail closed at the supported regular-file boundary: Manifest v2 apply refuses
+  file symlinks before moving them, and recovery refuses unsupported filesystem
+  objects and unsafe symlink topologies;
+- treat SHA-256 and byte counts only as payload identity evidence, not manifest
+  authenticity or proof that bytes remain unchanged after observation;
+- harden CI and release workflows with least-privilege permissions and external
+  actions pinned to immutable commit SHAs;
+- add explicit release-artifact build provenance and validate the exact draft
+  asset filename set before GitHub Release publication.
 
 ## [0.5.0] - 2026-08-05
 
@@ -111,7 +133,8 @@ All notable changes to this project are documented in this file.
 - Ruff now targets the minimum supported Python version, Python 3.11;
 - CI separates quality, compatibility, and installed-package checks.
 
-[Unreleased]: https://github.com/gcomneno/smart-file-organizer/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/gcomneno/smart-file-organizer/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/gcomneno/smart-file-organizer/releases/tag/v0.6.0
 [0.5.0]: https://github.com/gcomneno/smart-file-organizer/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/gcomneno/smart-file-organizer/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/gcomneno/smart-file-organizer/compare/v0.4.0...v0.4.1
