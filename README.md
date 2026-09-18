@@ -9,16 +9,21 @@ The project organizes files by building a safe plan first. By default it only pr
 
 ## Project status
 
-The current released baseline is v0.4.2. Its operational behavior and
-limitations are documented in this README. The approved forward architectural
-direction is [ADR 0001](docs/adr/0001-evolution-architecture.md). The normative
+The latest published release is **v0.5.0**. Current `main` contains unreleased
+development after v0.5.0, including Manifest v2 identity evidence, the current
+verifiable-recovery assessment chain, release-workflow hardening, and a
+read-only desktop recovery-assessment prototype. Unless a section explicitly
+describes a published release, this README documents current `main`; these
+post-v0.5.0 capabilities are not part of the v0.5.0 release.
+
+The approved architectural direction is
+[ADR 0001](docs/adr/0001-evolution-architecture.md). The normative
 verifiable-recovery contract is defined by
 [ADR 0002](docs/adr/0002-verifiable-recovery-contract.md), with an
-[Italian mirror](docs/adr/0002-verifiable-recovery-contract.it.md). Roadmap
-implementation is tracked in [issue #67](https://github.com/gcomneno/smart-file-organizer/issues/67).
+[Italian mirror](docs/adr/0002-verifiable-recovery-contract.it.md).
 The [product readiness assessment](docs/product-readiness-assessment.md) is
 retained as the historical v0.3.3 assessment; its verdict does not describe
-the current v0.4.2 baseline.
+v0.5.0 or current development.
 
 ## Current features
 
@@ -48,10 +53,10 @@ Requirements:
 - Python 3.11 or Python 3.12;
 - `uv` for isolated command installation.
 
-Install version `0.4.2` directly from its release wheel:
+Install the latest published release, version `0.5.0`, directly from its wheel:
 
 ~~~bash
-uv tool install "https://github.com/gcomneno/smart-file-organizer/releases/download/v0.4.2/smart_file_organizer-0.4.2-py3-none-any.whl"
+uv tool install "https://github.com/gcomneno/smart-file-organizer/releases/download/v0.5.0/smart_file_organizer-0.5.0-py3-none-any.whl"
 ~~~
 
 Verify the installed version and provenance:
@@ -64,7 +69,7 @@ uv tool list
 Expected output:
 
 ~~~text
-smart-file-organizer 0.4.2
+smart-file-organizer 0.5.0
 ~~~
 
 Start with a dry run. Create a sample text file, then run:
@@ -84,9 +89,11 @@ Each release includes `SHA256SUMS`. Verify downloaded package artifacts with:
 sha256sum --check SHA256SUMS
 ~~~
 
-Future releases published after GitHub Immutable Releases is enabled are also
-intended to include GitHub release attestation and explicit build provenance.
-These attestations complement, but do not replace, `SHA256SUMS`.
+The release workflow on current `main` is configured to generate explicit
+build provenance and to validate exact draft assets before publication. Releases
+created after GitHub Immutable Releases is enabled are also expected to receive
+GitHub's immutable-release attestation. These post-v0.5.0 controls are not
+retroactive and complement, but do not replace, `SHA256SUMS`.
 
 The complete release procedure is documented in
 [docs/releasing.md](docs/releasing.md).
@@ -105,12 +112,14 @@ Run the test suite:
 uv run python -m pytest
 ~~~
 
-## Provisional Python API
+## Provisional Python API on current main
 
 The supported Python import path is `smart_file_organizer.api`. This Python API
 is provisional before 1.0 and until it has survived at least one release cycle.
 The CLI remains the most stable user-facing contract; the Python API is
 separately governed. Manifest schema compatibility is independently versioned.
+The example below describes current unreleased `main`; its verifiable-recovery
+assessment additions postdate v0.5.0.
 
 Internals, including `core.py` and implementation modules, may change without
 compatibility guarantees. Configure planning with
@@ -290,6 +299,11 @@ This moves files into category directories under the target root.
 
 ### Inspect and verify apply manifests
 
+This section describes current unreleased `main`. The v0.5.0 release supports
+strict schema-v1 manifest inspection, verification, and non-mutating recovery
+planning; Manifest v2 identity evidence and the safety-aware assessment layers
+below were added after that release.
+
 Apply manifests are owned by an independently versioned execution schema.
 Explicit apply now writes strict schema version 2 manifests. Every completed v2
 move carries historical payload identity evidence built from a full SHA-256 and
@@ -328,10 +342,11 @@ inconsistent current filesystem is still a successful verification result.
 `assess_recovery(path)`, which preserves the chain:
 
 ~~~text
-ApplyManifest
-  -> ManifestVerification
-    -> RecoverySafetyClassification
-      -> RecoveryPlan
+historical evidence
+  -> current observation
+    -> identity verification
+      -> recovery safety
+        -> recovery proposal
 ~~~
 
 It proposes a reverse move only for a schema-version-2 completed record whose
@@ -411,6 +426,25 @@ Refused JSON items expose only `"plan": {"disposition": "refused"}` and omit
 `recovery_source` and `recovery_destination`. Recovery-assessment JSON does not
 expose payload contents, SHA-256 digests, byte sizes, or observation timestamps.
 
+### Read-only desktop recovery assessment (current main)
+
+Current unreleased `main` includes a read-only desktop prototype for inspecting
+the same recovery-assessment layers:
+
+~~~bash
+python -m smart_file_organizer.gui
+~~~
+
+The prototype can select and assess a manifest, but it cannot move, restore,
+delete, or overwrite files. `SAFE_TO_RECOVER` and `PROPOSED` remain assessment
+results, not filesystem-mutation authority.
+
+The adapter uses Python's stdlib `tkinter` when the Python and Linux system
+installation provide Tk support. Tk is optional: it is not a mandatory runtime
+dependency of the core package, and missing Tk support does not prevent CLI or
+Python API use. The desktop prototype is post-v0.5.0 development and is not
+included in the v0.5.0 release.
+
 Example target layout:
 
 ~~~text
@@ -459,8 +493,8 @@ The main safety and behavior contracts are documented in these owning sections:
 - [Symlink and hidden-file policy](#symlink-and-hidden-file-policy): inclusion,
   traversal, and move semantics;
 - [Apply results and recovery manifests](#apply-results-and-recovery-manifests):
-  durable evidence, partial failure, manual recovery, and the absence of
-  filesystem-wide atomicity;
+  durable evidence, partial failure, read-only recovery assessment, and the
+  absence of filesystem-wide atomicity or a recovery executor;
 - [Classification audience, precedence, and explanations](#classification-audience-precedence-and-explanations):
   path context, inspected content, built-ins, configured rules, and overrides.
 
@@ -585,15 +619,22 @@ Execution stops at the first move failure. The CLI reports completed, failed,
 and unattempted counts, prints the manifest path, and exits unsuccessfully
 without a Python traceback.
 
-The manifest is recovery evidence, not an automatic rollback mechanism. For
-manual recovery:
+The manifest is historical recovery evidence, not mutation authority or an
+automatic rollback mechanism. Assess current state through the supported
+read-only surfaces described in [Inspect and verify apply
+manifests](#inspect-and-verify-apply-manifests): `manifest verify MANIFEST
+[--json]` for verification and `recover plan MANIFEST [--json]` for the full
+recovery assessment. The corresponding Python API surfaces are
+`verify_manifest(path)`, `assess_recovery(path)`, and the compatibility
+plan-layer function `plan_recovery(path)`.
 
-1. inspect both `original_path` and `final_path` for every non-unattempted entry;
-2. treat `completed` entries as files expected at `final_path`;
-3. treat `failed` and `in_progress` entries as requiring inspection of both
-   locations;
-4. move completed files back only after confirming that restoring
-   `original_path` will not overwrite another file.
+Current `main` has no supported recovery executor. Verification, recovery
+assessment, and recovery planning are non-mutating. In particular,
+`SAFE_TO_RECOVER` and `PROPOSED` are point-in-time evidence/proposal results;
+they do not authorize a human, the CLI, the Python API, or the desktop adapter
+to mutate the filesystem. Historical `completed` status, path presence,
+overwrite checks, and schema-v1 plans likewise do not establish mutation
+safety.
 
 Filesystem-wide atomicity is not guaranteed. In particular, `shutil.move` may
 perform a copy followed by source removal across filesystems. A process crash,
@@ -920,49 +961,35 @@ These limitations are intentional for now. The project is being built step by st
 
 ## Project structure
 
+The following is a non-exhaustive selection of the current boundaries:
+
 ~~~text
 src/smart_file_organizer/
-├── app_logging.py
 ├── api.py
-├── classification.py
+├── application.py
 ├── cli.py
-├── config.py
 ├── content_planning.py
-├── core.py
-├── document_text.py
-├── evidence.py
-├── errors.py
-├── models.py
-├── plan_output.py
 ├── planning.py
-├── semantic_rules.py
-└── taxonomy.py
-
-tests/
-├── test_cli.py
-├── test_api.py
-├── test_config.py
-├── test_content_planning.py
-├── test_core.py
-├── test_document_text.py
-└── test_plan_output.py
+├── execution.py
+├── manifest_models.py
+├── manifest_store.py
+├── manifest_verification.py
+├── recovery_safety.py
+├── recovery_planning.py
+└── gui/
+    ├── controller.py
+    ├── view_model.py
+    └── tk_app.py
 ~~~
 
-`api.py` is the provisional supported Python API. `core.py` retains historical
-compatibility exports but is not covered by the API stability promise.
+`api.py` is the provisional supported Python API, and `application.py`
+orchestrates application use cases. `planning.py` performs non-mutating move
+planning and conflict resolution; `content_planning.py` adds document-content
+inputs without owning execution. `execution.py` is the filesystem-mutation
+boundary for explicitly applied organization plans.
 
-`models.py` contains shared domain models and type aliases.
-
-`plan_output.py` contains plan preview formatters for text and JSON output.
-
-`classification.py` contains extension-based file classification.
-
-`semantic_rules.py` contains semantic destination rule matching.
-
-`planning.py` contains move planning, conflict detection, and safe execution helpers.
-
-`content_planning.py` connects document text extraction to planning helpers.
-
-`document_text.py` contains supported document text extraction utilities.
-
-`cli.py` contains the command-line interface.
+The manifest modules own persisted history and read-only current-state
+verification; `recovery_safety.py` and `recovery_planning.py` classify evidence
+and produce non-mutating proposals. `cli.py` and `gui/` are adapters over the
+application/API boundary. The GUI presents recovery assessments and does not
+own domain, application, recovery-safety, or execution semantics.
